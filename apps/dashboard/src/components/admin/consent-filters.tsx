@@ -34,6 +34,7 @@ export function ConsentFilters({
         <option value="visma">Visma eEkonomi</option>
         <option value="bokio">Bokio</option>
         <option value="bjornlunden">Bjorn Lunden</option>
+        <option value="sie-upload">Manual SIE Upload</option>
       </Select>
       <Select value={status} onChange={(e) => onStatusChange(e.target.value)} className="w-36">
         <option value="">All statuses</option>

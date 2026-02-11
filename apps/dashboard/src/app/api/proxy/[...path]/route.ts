@@ -13,10 +13,19 @@ async function proxyRequest(request: NextRequest, { params }: { params: Promise<
     url.searchParams.set(key, value);
   });
 
+  const contentType = request.headers.get('Content-Type') || '';
+  const isMultipart = contentType.startsWith('multipart/form-data');
+
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${SERVICE_KEY}`,
-    'Content-Type': 'application/json',
   };
+
+  if (!isMultipart) {
+    headers['Content-Type'] = 'application/json';
+  } else {
+    // Preserve the full Content-Type with boundary for multipart
+    headers['Content-Type'] = contentType;
+  }
 
   // Forward If-Match header for PATCH
   const ifMatch = request.headers.get('If-Match');
@@ -31,8 +40,14 @@ async function proxyRequest(request: NextRequest, { params }: { params: Promise<
 
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     try {
-      const body = await request.text();
-      if (body) fetchOptions.body = body;
+      if (isMultipart) {
+        // Forward raw binary body for multipart (preserves boundary)
+        const buffer = await request.arrayBuffer();
+        if (buffer.byteLength > 0) fetchOptions.body = buffer;
+      } else {
+        const body = await request.text();
+        if (body) fetchOptions.body = body;
+      }
     } catch {
       // No body
     }

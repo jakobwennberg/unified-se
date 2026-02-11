@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import type { DatabaseAdapter, Logger, TokenEncryption } from '@arcim-sync/core';
+import type { DatabaseAdapter, Logger, TokenEncryption, SIEType } from '@arcim-sync/core';
 import { ConsentStatus } from '@arcim-sync/core';
+import { parseSIE, decodeSIEBuffer, calculateKPIs } from '@arcim-sync/core/sie';
 import { CreateConsentBody, UpdateConsentBody, ConsentQueryParams, CreateOTCBody, TokenExchangeBody } from '../schemas-v1.js';
 import type { AppEnv } from '../types.js';
 
@@ -199,6 +200,141 @@ export function consentRoutes(
 
     logger.info('Token stored, consent accepted', { consentId: parsed.data.consentId });
     return c.json({ success: true, consentId: parsed.data.consentId });
+  });
+
+  return app;
+}
+
+/**
+ * SIE upload/retrieval routes for sie-upload consents.
+ * Mounted separately to avoid the consent middleware (which requires credentials).
+ */
+export function consentSieRoutes(db: DatabaseAdapter, logger: Logger) {
+  const app = new Hono<AppEnv>();
+
+  // POST /api/v1/consents/:consentId/sie-upload — upload SIE files for sie-upload consents
+  app.post('/:consentId/sie-upload', async (c) => {
+    const consentId = c.req.param('consentId');
+    const consent = await db.getConsent(consentId);
+    if (!consent) {
+      return c.json({ error: 'Consent not found' }, 404);
+    }
+    if (consent.provider !== 'sie-upload') {
+      return c.json({ error: 'This endpoint is only for sie-upload consents' }, 400);
+    }
+
+    const formData = await c.req.formData();
+    const files = formData.getAll('files');
+    if (files.length === 0) {
+      return c.json({ error: 'No files provided' }, 400);
+    }
+
+    const results: Array<{
+      fileName: string;
+      fiscalYear: number;
+      sieType: number;
+      accountCount: number;
+      transactionCount: number;
+      companyName: string;
+      orgNumber?: string;
+    }> = [];
+
+    for (const file of files) {
+      if (!(file instanceof File)) continue;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const content = decodeSIEBuffer(buffer);
+      const parsed = parseSIE(content);
+      const kpis = calculateKPIs(parsed);
+
+      // Extract fiscal year from metadata
+      const fyEnd = parsed.metadata.fiscalYearEnd;
+      const fiscalYear = fyEnd ? parseInt(fyEnd.slice(0, 4), 10) : new Date().getFullYear();
+
+      // Extract SIE type from metadata (default to 4)
+      const sieType = (parsed.metadata.sieType ? parseInt(parsed.metadata.sieType, 10) : 4) as SIEType;
+
+      await db.storeSIEData(consentId, {
+        connectionId: consentId,
+        fiscalYear,
+        sieType,
+        parsed,
+        kpis,
+        rawContent: content,
+      });
+
+      results.push({
+        fileName: file.name,
+        fiscalYear,
+        sieType,
+        accountCount: parsed.accounts.length,
+        transactionCount: parsed.transactions.length,
+        companyName: parsed.metadata.companyName,
+        orgNumber: parsed.metadata.orgNumber,
+      });
+    }
+
+    // Auto-populate consent companyName/orgNumber from first file if empty
+    const first = results[0];
+    if (first && (!consent.companyName || !consent.orgNumber)) {
+      await db.upsertConsent({
+        ...consent,
+        companyName: consent.companyName || first.companyName || consent.companyName,
+        orgNumber: consent.orgNumber || first.orgNumber || consent.orgNumber,
+        status: ConsentStatus.Accepted,
+        etag: crypto.randomUUID(),
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      // Still update status to Accepted
+      await db.upsertConsent({
+        ...consent,
+        status: ConsentStatus.Accepted,
+        etag: crypto.randomUUID(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    logger.info('SIE files uploaded', { consentId, fileCount: results.length });
+    return c.json({ success: true, uploads: results }, 201);
+  });
+
+  // GET /api/v1/consents/:consentId/sie — list SIE uploads
+  app.get('/:consentId/sie', async (c) => {
+    const consentId = c.req.param('consentId');
+    const consent = await db.getConsent(consentId);
+    if (!consent) {
+      return c.json({ error: 'Consent not found' }, 404);
+    }
+
+    const uploads = await db.getSIEUploads(consentId);
+
+    // Enrich with full KPIs and metadata
+    const enriched = await Promise.all(
+      uploads.map(async (upload) => {
+        const full = await db.getSIEData(upload.uploadId);
+        return {
+          ...upload,
+          metadata: full?.parsed?.metadata ?? null,
+          balanceCount: full?.parsed?.balances?.length ?? 0,
+          dimensionCount: full?.parsed?.dimensions?.length ?? 0,
+          kpis: full?.kpis ?? null,
+        };
+      }),
+    );
+
+    return c.json({ data: enriched });
+  });
+
+  // GET /api/v1/consents/:consentId/sie/:uploadId — get full SIE data
+  app.get('/:consentId/sie/:uploadId', async (c) => {
+    const uploadId = c.req.param('uploadId');
+    const data = await db.getSIEData(uploadId);
+    if (!data) {
+      return c.json({ error: 'SIE upload not found' }, 404);
+    }
+    return c.json(data);
   });
 
   return app;

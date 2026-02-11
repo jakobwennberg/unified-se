@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Sparkles, Download, Save, Copy, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Sparkles, Download, Save, Copy, ChevronDown, ChevronUp, Loader2, Check, AlertTriangle } from 'lucide-react';
 
 interface CompanyProfile {
   companyName: string;
@@ -52,7 +52,7 @@ const KPI_LABELS: Record<string, string> = {
   equityRatio: 'Soliditet',
   currentRatio: 'Balanslikviditet',
   totalAssets: 'Totala tillgångar',
-  totalEquity: 'Eget kapital',
+  adjustedEquity: 'Justerat eget kapital',
   cashAndBank: 'Kassa och bank',
   ebitda: 'EBITDA',
   roe: 'Avk. eget kapital',
@@ -60,16 +60,115 @@ const KPI_LABELS: Record<string, string> = {
 
 function formatKPI(key: string, value: number | null): string {
   if (value == null) return '-';
-  const isPercentage = [
+  // KPIs already stored as percentages by calculateKPIs (e.g. 72.95 = 72.95%)
+  const isAlreadyPercent = [
     'grossMargin', 'operatingMargin', 'netMargin', 'equityRatio',
-    'currentRatio', 'roe', 'roa',
+    'roe', 'roa',
   ].includes(key);
-  if (isPercentage) return `${(value * 100).toFixed(1)}%`;
+  if (isAlreadyPercent) return `${value.toFixed(1)}%`;
+  // Ratios that need * 100 to display as percentage (e.g. 1.527 → 152.7%)
+  const isRatio = ['currentRatio'].includes(key);
+  if (isRatio) return `${(value * 100).toFixed(1)}%`;
   return new Intl.NumberFormat('sv-SE', {
     style: 'currency',
     currency: 'SEK',
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+const GENERATION_STEPS = [
+  { label: 'Förbereder prompt', delay: 0 },
+  { label: 'AI genererar finansiell blueprint', delay: 2000 },
+  { label: 'Bygger kontoplan', delay: 8000 },
+  { label: 'Beräknar ingående balanser', delay: 14000 },
+  { label: 'Genererar verifikationer', delay: 20000 },
+  { label: 'Skriver SIE-fil', delay: 26000 },
+  { label: 'Beräknar nyckeltal', delay: 30000 },
+] as const;
+
+const INDUSTRY_LABELS: Record<string, string> = {
+  consulting: 'Konsulting',
+  retail: 'Detaljhandel',
+  manufacturing: 'Tillverkning',
+  restaurant: 'Restaurang',
+  construction: 'Bygg',
+  saas: 'SaaS',
+  healthcare: 'Sjukvård',
+  transport: 'Transport',
+  real_estate: 'Fastigheter',
+};
+
+const SIZE_LABELS: Record<string, string> = {
+  micro: 'Micro (1-3 anställda)',
+  small: 'Liten (4-15 anställda)',
+  medium: 'Medel (16-50 anställda)',
+};
+
+function GenerationProgress({ startTime }: { startTime: number }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Date.now() - startTime), 200);
+    return () => clearInterval(id);
+  }, [startTime]);
+
+  const currentStepIdx = GENERATION_STEPS.reduce(
+    (acc, step, i) => (elapsed >= step.delay ? i : acc),
+    0,
+  );
+  const progress = Math.min(
+    95,
+    (elapsed / 35000) * 100,
+  );
+
+  return (
+    <Card className="border-blue-200 bg-blue-50/50">
+      <CardContent className="pt-6">
+        <div className="space-y-4">
+          {/* Progress bar */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Genererar företag...</span>
+              <span>{Math.floor(elapsed / 1000)}s</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-blue-100">
+              <div
+                className="h-full rounded-full bg-blue-500 transition-all duration-500 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Steps */}
+          <div className="space-y-1.5">
+            {GENERATION_STEPS.map((step, i) => {
+              const isComplete = i < currentStepIdx;
+              const isCurrent = i === currentStepIdx;
+              return (
+                <div
+                  key={step.label}
+                  className={`flex items-center gap-2 text-sm transition-opacity duration-300 ${
+                    isComplete || isCurrent ? 'opacity-100' : 'opacity-30'
+                  }`}
+                >
+                  {isComplete ? (
+                    <Check className="h-3.5 w-3.5 text-blue-600" />
+                  ) : isCurrent ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                  ) : (
+                    <div className="h-3.5 w-3.5 rounded-full border border-gray-300" />
+                  )}
+                  <span className={isCurrent ? 'font-medium text-blue-900' : isComplete ? 'text-blue-700' : 'text-gray-500'}>
+                    {step.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function GenerateCompanyPage() {
@@ -83,11 +182,13 @@ export default function GenerateCompanyPage() {
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [copied, setCopied] = useState(false);
+  const generationStartRef = useRef(0);
 
   async function handleGenerate() {
     setLoading(true);
     setError(null);
     setResult(null);
+    generationStartRef.current = Date.now();
     try {
       const body: Record<string, unknown> = {
         size,
@@ -104,12 +205,12 @@ export default function GenerateCompanyPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? `Generation failed (${res.status})`);
+        throw new Error(data?.error ?? `Generering misslyckades (${res.status})`);
       }
 
       setResult(await res.json());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setError(e instanceof Error ? e.message : 'Något gick fel');
     } finally {
       setLoading(false);
     }
@@ -135,13 +236,13 @@ export default function GenerateCompanyPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? `Save failed (${res.status})`);
+        throw new Error(data?.error ?? `Sparande misslyckades (${res.status})`);
       }
 
       const saved = await res.json();
       setResult(saved);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setError(e instanceof Error ? e.message : 'Något gick fel');
     } finally {
       setSaving(false);
     }
@@ -169,21 +270,21 @@ export default function GenerateCompanyPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Generate Company</h1>
+        <h1 className="text-2xl font-bold">Generera företag</h1>
         <p className="text-muted-foreground mt-1">
-          Use AI to generate a realistic Swedish company with full accounting data as a SIE file.
+          Använd AI för att generera ett realistiskt svenskt företag med fullständig bokföring som SIE-fil.
         </p>
       </div>
 
       {/* Form */}
       <Card>
         <CardHeader>
-          <CardTitle>Company Settings</CardTitle>
+          <CardTitle>Företagsinställningar</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Industry</label>
+              <label className="text-sm font-medium">Bransch</label>
               <Select
                 value={industry}
                 onChange={(e) => setIndustry(e.target.value)}
@@ -197,7 +298,7 @@ export default function GenerateCompanyPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Company Size</label>
+              <label className="text-sm font-medium">Företagsstorlek</label>
               <Select
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
@@ -211,7 +312,7 @@ export default function GenerateCompanyPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Fiscal Year</label>
+              <label className="text-sm font-medium">Räkenskapsår</label>
               <Input
                 type="number"
                 min={2000}
@@ -230,7 +331,7 @@ export default function GenerateCompanyPage() {
                 className="h-4 w-4 rounded border-gray-300"
               />
               <label htmlFor="prevYear" className="text-sm font-medium">
-                Include previous year
+                Inkludera föregående år
               </label>
             </div>
           </div>
@@ -240,12 +341,12 @@ export default function GenerateCompanyPage() {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  Genererar...
                 </>
               ) : (
                 <>
                   <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Company
+                  Generera företag
                 </>
               )}
             </Button>
@@ -258,6 +359,9 @@ export default function GenerateCompanyPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Generation Progress */}
+      {loading && <GenerationProgress startTime={generationStartRef.current} />}
 
       {/* Results */}
       {result && (
@@ -274,15 +378,15 @@ export default function GenerateCompanyPage() {
                   <dd className="font-medium">{result.profile.orgNumber}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Industry</dt>
-                  <dd className="font-medium capitalize">{result.profile.industry}</dd>
+                  <dt className="text-muted-foreground">Bransch</dt>
+                  <dd className="font-medium">{INDUSTRY_LABELS[result.profile.industry] ?? result.profile.industry}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Size</dt>
-                  <dd className="font-medium capitalize">{result.profile.size}</dd>
+                  <dt className="text-muted-foreground">Storlek</dt>
+                  <dd className="font-medium">{SIZE_LABELS[result.profile.size] ?? result.profile.size}</dd>
                 </div>
                 <div className="sm:col-span-2 lg:col-span-1">
-                  <dt className="text-muted-foreground">Description</dt>
+                  <dt className="text-muted-foreground">Beskrivning</dt>
                   <dd className="font-medium">{result.profile.description}</dd>
                 </div>
               </dl>
@@ -292,7 +396,7 @@ export default function GenerateCompanyPage() {
           {/* KPIs */}
           <Card>
             <CardHeader>
-              <CardTitle>Financial KPIs</CardTitle>
+              <CardTitle>Finansiella nyckeltal</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -308,11 +412,23 @@ export default function GenerateCompanyPage() {
             </CardContent>
           </Card>
 
+          {/* AI disclaimer */}
+          <div
+            className="flex items-start gap-2 rounded-md border p-3 text-sm"
+            style={{ borderColor: '#fbbf24', backgroundColor: '#fefce8', color: '#92400e' }}
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Denna data är AI-genererad och avsedd för demonstrations- och testningsändamål.
+              Nyckeltalen kan innehålla avvikelser och bör inte användas som underlag för verkliga beslut.
+            </p>
+          </div>
+
           {/* SIE Preview */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>SIE File</CardTitle>
+                <CardTitle>SIE-fil</CardTitle>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -321,12 +437,12 @@ export default function GenerateCompanyPage() {
                   {showPreview ? (
                     <>
                       <ChevronUp className="mr-1 h-4 w-4" />
-                      Hide
+                      Dölj
                     </>
                   ) : (
                     <>
                       <ChevronDown className="mr-1 h-4 w-4" />
-                      Preview
+                      Förhandsgranska
                     </>
                   )}
                 </Button>
@@ -336,14 +452,14 @@ export default function GenerateCompanyPage() {
               {showPreview && (
                 <pre className="mb-4 max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs">
                   {result.sieText.split('\n').slice(0, 60).join('\n')}
-                  {result.sieText.split('\n').length > 60 && '\n\n... (truncated)'}
+                  {result.sieText.split('\n').length > 60 && '\n\n... (trunkerad)'}
                 </pre>
               )}
 
               <div className="flex flex-wrap gap-2">
                 <Button onClick={handleDownload}>
                   <Download className="mr-2 h-4 w-4" />
-                  Download SIE
+                  Ladda ner SIE
                 </Button>
                 <Button
                   variant="outline"
@@ -353,30 +469,30 @@ export default function GenerateCompanyPage() {
                   {saving ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
+                      Sparar...
                     </>
                   ) : result.saved ? (
                     <>
                       <Save className="mr-2 h-4 w-4" />
-                      Saved
+                      Sparad
                     </>
                   ) : (
                     <>
                       <Save className="mr-2 h-4 w-4" />
-                      Save to App
+                      Spara i appen
                     </>
                   )}
                 </Button>
                 <Button variant="outline" onClick={handleCopy}>
                   <Copy className="mr-2 h-4 w-4" />
-                  {copied ? 'Copied!' : 'Copy to Clipboard'}
+                  {copied ? 'Kopierad!' : 'Kopiera'}
                 </Button>
               </div>
 
               {result.saved && result.connectionId && (
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Saved as connection <code className="rounded bg-muted px-1">{result.connectionId}</code>.
-                  View on the Dashboard.
+                  Sparad som anslutning <code className="rounded bg-muted px-1">{result.connectionId}</code>.
+                  Visa på Dashboard.
                 </p>
               )}
             </CardContent>

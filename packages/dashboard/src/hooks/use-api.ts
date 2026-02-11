@@ -1,6 +1,17 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ApiClient } from '../types.js';
 
+async function throwApiError(res: Response): Promise<never> {
+  let detail = '';
+  try {
+    const body = await res.json();
+    detail = body.error || JSON.stringify(body);
+  } catch {
+    detail = res.statusText;
+  }
+  throw new Error(`API error ${res.status}: ${detail}`);
+}
+
 export function createApiClient(baseUrl: string, apiKey?: string): ApiClient {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -14,7 +25,7 @@ export function createApiClient(baseUrl: string, apiKey?: string): ApiClient {
     headers,
     async get<T>(path: string): Promise<T> {
       const res = await fetch(`${baseUrl}${path}`, { headers });
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      if (!res.ok) await throwApiError(res);
       return res.json();
     },
     async post<T>(path: string, body?: unknown): Promise<T> {
@@ -23,7 +34,7 @@ export function createApiClient(baseUrl: string, apiKey?: string): ApiClient {
         headers,
         body: body ? JSON.stringify(body) : undefined,
       });
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      if (!res.ok) await throwApiError(res);
       return res.json();
     },
     async patch<T>(path: string, body: unknown, etag?: string): Promise<T> {
@@ -34,12 +45,12 @@ export function createApiClient(baseUrl: string, apiKey?: string): ApiClient {
         headers: patchHeaders,
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      if (!res.ok) await throwApiError(res);
       return res.json();
     },
     async delete(path: string): Promise<void> {
       const res = await fetch(`${baseUrl}${path}`, { method: 'DELETE', headers });
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      if (!res.ok) await throwApiError(res);
     },
   };
 }

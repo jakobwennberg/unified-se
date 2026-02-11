@@ -32,6 +32,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   briox: 'Briox',
   bokio: 'Bokio',
   bjornlunden: 'Bjorn Lunden',
+  'sie-upload': 'Manual SIE Upload',
 };
 
 interface Consent {
@@ -146,6 +147,7 @@ export default function ConsentsPage() {
                 <option value="fortnox">Fortnox</option>
                 <option value="visma">Visma eEkonomi</option>
                 <option value="briox">Briox</option>
+                <option value="sie-upload">Manual SIE Upload</option>
               </Select>
             </div>
             <div className="space-y-2">

@@ -21,6 +21,9 @@ dist/
 *.swo
 .DS_Store
 
+# Dev data
+.data/
+
 # Test
 coverage/
 
@@ -29,3 +32,4 @@ coverage/
 
 SIE_files
 generate-SIE.md
+.next

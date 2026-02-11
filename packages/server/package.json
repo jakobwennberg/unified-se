@@ -21,7 +21,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch dev-server.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",

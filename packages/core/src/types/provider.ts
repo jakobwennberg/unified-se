@@ -7,6 +7,7 @@ export const ProviderNameSchema = z.enum([
   'briox',
   'bokio',
   'bjornlunden',
+  'sie-upload',
 ]);
 
 export type ProviderName = z.infer<typeof ProviderNameSchema>;

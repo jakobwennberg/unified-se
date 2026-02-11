@@ -8,9 +8,9 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/consents', label: 'Consents', icon: FileCheck },
-  { href: '/generate', label: 'Generate Company', icon: Sparkles },
   { href: '/api-keys', label: 'API Keys', icon: Key },
   { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/generate', label: 'Generate Company', icon: Sparkles },
 ];
 
 export function Sidebar() {

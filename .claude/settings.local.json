@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(del \"C:\\\\Users\\\\emilm\\\\projects\\\\unified-se\\\\packages\\\\core\\\\src\\\\sie\\\\writer.test.ts\")",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(powershell.exe -Command \"cd ''C:\\\\Users\\\\emilm\\\\projects\\\\unified-se\\\\packages\\\\server'' ; npx vitest run --reporter=verbose 2>&1 | Select-Object -Last 50\")",
+      "Bash(powershell.exe -Command \"cd ''C:\\\\Users\\\\emilm\\\\projects\\\\unified-se\\\\packages\\\\core'' ; npx vitest run --reporter=verbose 2>&1 | Select-Object -Last 20\")",
+      "WebFetch(domain:consultjourney.com)",
+      "Bash(powershell.exe -Command \"cd ''C:\\\\Users\\\\emilm\\\\projects\\\\unified-se\\\\packages\\\\server'' ; npx vitest run 2>&1 | Select-Object -Last 10\")",
+      "Bash(npm run build:*)"
     ]
   }
 }

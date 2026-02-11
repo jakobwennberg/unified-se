@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
-import type { Logger } from '@arcim-sync/core';
+import type { Context } from 'hono';
+import type { DatabaseAdapter, Logger, TokenEncryption } from '@arcim-sync/core';
 import {
+  ConsentStatus,
   buildFortnoxAuthUrl,
   exchangeFortnoxCode,
   refreshFortnoxToken,
@@ -16,12 +18,79 @@ import {
   VismaUrlQuery, VismaExchangeBody, VismaRefreshBody, VismaRevokeBody,
 } from '../schemas.js';
 
-function fortnoxRoutes(fortnoxOAuth?: FortnoxOAuthConfig) {
+interface CallbackDeps {
+  db?: DatabaseAdapter;
+  logger: Logger;
+  tokenEncryption?: TokenEncryption;
+}
+
+type OAuthConfig = { clientId: string; clientSecret: string; redirectUri: string };
+
+async function handleCallback(
+  provider: string,
+  oauthConfig: OAuthConfig | undefined,
+  exchangeFn: (config: OAuthConfig, code: string) => Promise<{ access_token: string; refresh_token: string; expires_in: number }>,
+  deps: CallbackDeps,
+  c: Context,
+) {
+  if (!deps.db) {
+    return c.json({ error: 'Database not configured for auth callbacks' }, 501);
+  }
+  if (!oauthConfig) {
+    return c.json({ error: `${provider} OAuth not configured` }, 501);
+  }
+
+  const body = await c.req.json();
+  const { code, consentId } = body;
+  if (!code || !consentId) {
+    return c.json({ error: 'code and consentId are required' }, 400);
+  }
+
+  const consent = await deps.db.getConsent(consentId);
+  if (!consent) {
+    return c.json({ error: 'Consent not found' }, 404);
+  }
+  if (consent.provider !== provider) {
+    return c.json({ error: `Consent provider mismatch: expected ${consent.provider}, got ${provider}` }, 400);
+  }
+
+  const tokens = await exchangeFn(oauthConfig, code);
+
+  let accessToken = tokens.access_token;
+  let refreshToken = tokens.refresh_token;
+  if (deps.tokenEncryption) {
+    accessToken = deps.tokenEncryption.encrypt(accessToken);
+    if (refreshToken) {
+      refreshToken = deps.tokenEncryption.encrypt(refreshToken);
+    }
+  }
+
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+  await deps.db.storeConsentTokens({
+    consentId,
+    provider,
+    accessToken,
+    refreshToken,
+    tokenExpiresAt: expiresAt,
+  });
+
+  await deps.db.upsertConsent({
+    ...consent,
+    status: ConsentStatus.Accepted,
+    etag: crypto.randomUUID(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  deps.logger.info('OAuth callback: tokens stored, consent accepted', { consentId, provider });
+  return c.json({ success: true, consentId });
+}
+
+function fortnoxRoutes(fortnoxOAuth: FortnoxOAuthConfig | undefined, deps: CallbackDeps) {
   const app = new Hono();
 
-  // Guard: all fortnox routes return 501 if no config
+  // Guard: all fortnox routes return 501 if no config (except callback which checks itself)
   app.use('*', async (c, next) => {
-    if (!fortnoxOAuth) {
+    if (!fortnoxOAuth && c.req.path !== '/callback') {
       return c.json({ error: 'Fortnox OAuth not configured' }, 501);
     }
     return next();
@@ -48,6 +117,11 @@ function fortnoxRoutes(fortnoxOAuth?: FortnoxOAuthConfig) {
     const url = buildFortnoxAuthUrl(effectiveConfig, { scopes, state });
     return c.json({ url });
   });
+
+  // POST /auth/fortnox/callback — exchange code + store tokens for a consent
+  app.post('/callback', (c) =>
+    handleCallback('fortnox', fortnoxOAuth, exchangeFortnoxCode, deps, c),
+  );
 
   // POST /auth/fortnox/exchange
   app.post('/exchange', async (c) => {
@@ -88,12 +162,12 @@ function fortnoxRoutes(fortnoxOAuth?: FortnoxOAuthConfig) {
   return app;
 }
 
-function vismaRoutes(vismaOAuth?: VismaOAuthConfig) {
+function vismaRoutes(vismaOAuth: VismaOAuthConfig | undefined, deps: CallbackDeps) {
   const app = new Hono();
 
-  // Guard: all visma routes return 501 if no config
+  // Guard: all visma routes return 501 if no config (except callback which checks itself)
   app.use('*', async (c, next) => {
-    if (!vismaOAuth) {
+    if (!vismaOAuth && c.req.path !== '/callback') {
       return c.json({ error: 'Visma OAuth not configured' }, 501);
     }
     return next();
@@ -122,6 +196,11 @@ function vismaRoutes(vismaOAuth?: VismaOAuthConfig) {
     const url = buildVismaAuthUrl(effectiveConfig, { scopes, state, acrValues });
     return c.json({ url });
   });
+
+  // POST /auth/visma/callback — exchange code + store tokens for a consent
+  app.post('/callback', (c) =>
+    handleCallback('visma', vismaOAuth, exchangeVismaCode, deps, c),
+  );
 
   // POST /auth/visma/exchange
   app.post('/exchange', async (c) => {
@@ -162,11 +241,12 @@ function vismaRoutes(vismaOAuth?: VismaOAuthConfig) {
   return app;
 }
 
-export function authRoutes(logger: Logger, fortnoxOAuth?: FortnoxOAuthConfig, vismaOAuth?: VismaOAuthConfig) {
+export function authRoutes(logger: Logger, fortnoxOAuth?: FortnoxOAuthConfig, vismaOAuth?: VismaOAuthConfig, db?: DatabaseAdapter, tokenEncryption?: TokenEncryption) {
   const app = new Hono();
+  const deps: CallbackDeps = { db, logger, tokenEncryption };
 
-  app.route('/fortnox', fortnoxRoutes(fortnoxOAuth));
-  app.route('/visma', vismaRoutes(vismaOAuth));
+  app.route('/fortnox', fortnoxRoutes(fortnoxOAuth, deps));
+  app.route('/visma', vismaRoutes(vismaOAuth, deps));
 
   return app;
 }
