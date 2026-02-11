@@ -4,6 +4,7 @@ import type { EntityType } from './entity.js';
 export const ProviderNameSchema = z.enum([
   'fortnox',
   'visma',
+  'briox',
   'bokio',
   'bjornlunden',
 ]);

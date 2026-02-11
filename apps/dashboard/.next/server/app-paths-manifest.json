@@ -1,9 +1,6 @@
 {
   "/api/proxy/[...path]/route": "app/api/proxy/[...path]/route.js",
   "/_not-found/page": "app/_not-found/page.js",
-  "/onboarding/consent/[consentId]/page": "app/onboarding/consent/[consentId]/page.js",
-  "/customer/consent/[consentId]/page": "app/customer/consent/[consentId]/page.js",
-  "/onboarding/oauth-callback/page": "app/onboarding/oauth-callback/page.js",
   "/(admin)/consents/[consentId]/page": "app/(admin)/consents/[consentId]/page.js",
   "/(admin)/consents/page": "app/(admin)/consents/page.js"
 }

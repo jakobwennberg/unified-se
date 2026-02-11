@@ -4,15 +4,19 @@ import { ResourceType } from '../types/dto.ts';
 import type { OAuthConfig, TokenResponse } from '../providers/types.ts';
 import { FORTNOX_RESOURCE_CONFIGS } from '../providers/fortnox/config.ts';
 import { VISMA_RESOURCE_CONFIGS } from '../providers/visma/config.ts';
+import { BRIOX_RESOURCE_CONFIGS } from '../providers/briox/config.ts';
 import { FortnoxClient } from '../providers/fortnox/client.ts';
 import { VismaClient } from '../providers/visma/client.ts';
+import { BrioxClient } from '../providers/briox/client.ts';
 import { refreshFortnoxToken } from '../providers/fortnox/oauth.ts';
 import { refreshVismaToken } from '../providers/visma/oauth.ts';
+import { refreshBrioxToken } from '../providers/briox/oauth.ts';
 
 const app = new Hono();
 
 const fortnoxClient = new FortnoxClient();
 const vismaClient = new VismaClient();
+const brioxClient = new BrioxClient();
 
 const VALID_RESOURCE_TYPES = new Set(Object.values(ResourceType));
 
@@ -28,6 +32,13 @@ function getOAuthConfig(provider: string): OAuthConfig {
       clientId: Deno.env.get('FORTNOX_CLIENT_ID') ?? '',
       clientSecret: Deno.env.get('FORTNOX_CLIENT_SECRET') ?? '',
       redirectUri: Deno.env.get('FORTNOX_REDIRECT_URI') ?? '',
+    };
+  }
+  if (provider === 'briox') {
+    return {
+      clientId: Deno.env.get('BRIOX_CLIENT_ID') ?? '',
+      clientSecret: '',
+      redirectUri: '',
     };
   }
   return {
@@ -79,6 +90,8 @@ async function resolveConsent(tenantId: string, consentId: string): Promise<Reso
 
     if (consent.provider === 'fortnox') {
       refreshed = await refreshFortnoxToken(config, tokens.refresh_token);
+    } else if (consent.provider === 'briox') {
+      refreshed = await refreshBrioxToken(config.clientId, tokens.refresh_token);
     } else {
       refreshed = await refreshVismaToken(config, tokens.refresh_token);
     }
@@ -195,6 +208,51 @@ app.get('/:consentId/:resourceType', async (c) => {
     });
   }
 
+  if (provider === 'briox') {
+    const config = BRIOX_RESOURCE_CONFIGS[resourceType];
+    if (!config) {
+      return c.json({ error: `Resource ${resourceType} not supported for briox` }, 400);
+    }
+
+    if (config.singleton) {
+      const response = await brioxClient.get<{ data: Record<string, unknown> }>(accessToken, config.listEndpoint);
+      const mapped = stripRaw(config.mapper(response.data));
+      return c.json({ data: mapped });
+    }
+
+    const page = c.req.query('page') ? Number(c.req.query('page')) : 1;
+    const pageSize = c.req.query('pageSize') ? Number(c.req.query('pageSize')) : 100;
+
+    // Journal endpoint is year-scoped — resolve financial year ID
+    let listEndpoint = config.listEndpoint;
+    if (config.yearScoped) {
+      const fiscalYear = c.req.query('fiscalYear')
+        ?? await brioxClient.getCurrentFinancialYear(accessToken);
+      listEndpoint = `${config.listEndpoint}/${fiscalYear}`;
+    }
+
+    const result = await brioxClient.getPage<Record<string, unknown>>(
+      accessToken,
+      listEndpoint,
+      config.listKey,
+      {
+        page,
+        pageSize,
+        fromModifiedDate: config.supportsModifiedFilter ? c.req.query('lastModified') : undefined,
+      },
+    );
+
+    const mapped = result.items.map(config.mapper).map(stripRaw);
+    return c.json({
+      data: mapped,
+      page: result.page,
+      pageSize,
+      totalCount: result.totalCount,
+      totalPages: result.totalPages,
+      hasMore: result.page < result.totalPages,
+    });
+  }
+
   return c.json({ error: `Unknown provider: ${provider}` }, 400);
 });
 
@@ -245,6 +303,18 @@ app.get('/:consentId/:resourceType/:resourceId', async (c) => {
     const detailPath = config.detailEndpoint.replace('{id}', resourceId);
     const data = await vismaClient.get<Record<string, unknown>>(accessToken, detailPath);
     const mapped = stripRaw(config.mapper(data));
+    return c.json({ data: mapped });
+  }
+
+  if (provider === 'briox') {
+    const config = BRIOX_RESOURCE_CONFIGS[resourceType];
+    if (!config) {
+      return c.json({ error: `Resource ${resourceType} not supported for briox` }, 400);
+    }
+
+    const detailPath = config.detailEndpoint.replace('{id}', resourceId);
+    const response = await brioxClient.get<{ data: Record<string, unknown> }>(accessToken, detailPath);
+    const mapped = stripRaw(config.mapper(response.data));
     return c.json({ data: mapped });
   }
 

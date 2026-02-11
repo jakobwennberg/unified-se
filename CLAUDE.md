@@ -37,6 +37,9 @@ npx tsx try-it.ts
 
 # Dev mode (watches all packages)
 npm run dev
+
+# Deploy the Supabase Edge Function gateway (MUST use --no-verify-jwt)
+npx supabase functions deploy gateway --no-verify-jwt --project-ref ttlkxlcfrtkwszfypunk
 ```
 
 ## Architecture
@@ -74,3 +77,21 @@ Tables: `connections`, `entity_records` (with content_hash + unique on connectio
 
 - `dev_docs/` — Provider-specific implementation guides, SIE format specs, and architecture notes.
 - `plan/PLAN.md` — Original architectural vision. Useful for understanding design rationale and the "adding a new provider" guide, but note: the implementation has evolved (npm not pnpm, different dashboard components, added V2 provider interface and consent API).
+
+## Gotchas & Common Pitfalls
+
+### Deploying the gateway Edge Function
+The gateway uses its own API key auth (not Supabase JWT). **Always deploy with `--no-verify-jwt`**, otherwise Supabase will reject all requests that don't carry a valid Supabase JWT, breaking the dashboard proxy which sends the app-level `ARCIM_SERVICE_KEY` instead. Omitting this flag will cause all API calls to return `401 Invalid JWT`.
+
+### Adding a new provider
+When adding a new accounting provider, you must update **both** codebases:
+1. **Gateway** (`supabase/functions/gateway/`) — Deno code. Add the provider directory under `providers/`, update `providers/types.ts` (`ProviderName` union), `routes/resources.ts`, `routes/auth.ts`, and `routes/consents.ts` (allowed providers list).
+2. **Core package** (`packages/core/src/types/provider.ts`) — Add to `ProviderNameSchema` Zod enum. This is used by `packages/server/src/schemas-v1.ts` for request validation. **Rebuild core after** (`cd packages/core && npm run build`) or the server will reject the new provider name.
+
+These are two separate provider type systems. The gateway is standalone Deno; the core/server packages are Node. Both must be kept in sync.
+
+### `npm run dev` race condition
+The server package (`@arcim-sync/server`) may crash on startup with `ERR_MODULE_NOT_FOUND` for `@arcim-sync/core/dist/index.js`. This happens because `tsup --watch` cleans the output folder before rebuilding, and the server starts before core finishes. The `tsx watch` process in the server should auto-restart once core's build completes. If it doesn't, restart `npm run dev`.
+
+### Dashboard proxy architecture
+The Next.js dashboard at `apps/dashboard` proxies API calls through `/api/proxy/[...path]/route.ts` to `NEXT_PUBLIC_API_URL` (set in `.env.local`). In production this points to the deployed Supabase Edge Function gateway, **not** the local `packages/server`. Local code changes to gateway files require redeployment (`npx supabase functions deploy ...`) to take effect in the dashboard.
