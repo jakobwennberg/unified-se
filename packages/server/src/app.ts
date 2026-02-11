@@ -12,6 +12,8 @@ import { providersRoutes } from './routes/providers.js';
 import { consentRoutes } from './routes/consents.js';
 import { v1ResourceRoutes } from './routes/v1/index.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.js';
+import { generateRoutes } from './routes/generate.js';
+import { getAIConfig } from './ai/config.js';
 
 /**
  * Create a fully configured Hono app wrapping all @arcim-sync/core capabilities.
@@ -44,7 +46,11 @@ export function createServer(options: ServerOptions) {
   app.route('/auth', authRoutes(logger, fortnoxOAuth, vismaOAuth));
   app.route('/providers', providersRoutes(logger));
 
-  // 5. V1 API — consent-based resource routes
+  // 5. Generate routes (AI company generation)
+  const aiConfig = options.aiConfig ?? getAIConfig();
+  app.route('/generate', generateRoutes(db, logger, aiConfig));
+
+  // 6. V1 API — consent-based resource routes
   const tokenEncryption = options.tokenEncryptionKey
     ? createAESEncryption(options.tokenEncryptionKey)
     : undefined;

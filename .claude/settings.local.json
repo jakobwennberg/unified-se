@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(del \"C:\\\\Users\\\\emilm\\\\projects\\\\unified-se\\\\packages\\\\core\\\\src\\\\sie\\\\writer.test.ts\")",
+      "Bash(npm install:*)"
+    ]
+  }
+}

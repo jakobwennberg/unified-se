@@ -13,7 +13,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=20.0.0"
   },
@@ -27,8 +29,12 @@
   },
   "dependencies": {
     "@arcim-sync/core": "*",
-    "hono": "^4.6.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.987.0",
     "@hono/zod-openapi": "^0.18.0",
+    "@langchain/aws": "^1.2.2",
+    "@langchain/core": "^1.1.22",
+    "hono": "^4.6.0",
+    "langchain": "^1.2.21",
     "zod": "^3.24.0"
   },
   "devDependencies": {

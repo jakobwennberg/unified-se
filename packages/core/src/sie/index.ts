@@ -1,4 +1,5 @@
 export { parseSIE } from './parser.js';
+export { writeSIE, type WriteSIEOptions } from './writer.js';
 export {
   decodeSIEBuffer,
   decodeSIEBufferWithEncoding,

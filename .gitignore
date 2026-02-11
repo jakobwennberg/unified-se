@@ -3,6 +3,7 @@ node_modules/
 
 # Build outputs
 dist/
+.next/
 *.tsbuildinfo
 
 # Turborepo
@@ -25,3 +26,6 @@ coverage/
 
 # Logs
 *.log
+
+SIE_files
+generate-SIE.md

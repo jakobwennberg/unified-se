@@ -4,3 +4,5 @@ export { consentRoutes } from './routes/consents.js';
 export { v1ResourceRoutes } from './routes/v1/index.js';
 export { consentMiddleware } from './middleware/consent.js';
 export { rateLimitMiddleware, type RateLimitConfig } from './middleware/rate-limit.js';
+export { getAIConfig, hasAWSCredentials, isTracingEnabled, type AIConfig } from './ai/config.js';
+export { generateRoutes } from './routes/generate.js';

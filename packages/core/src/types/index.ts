@@ -60,5 +60,14 @@ export {
   type CreateConsentInput,
 } from './consent.js';
 
+// Generation types
+export type {
+  CompanyIndustry,
+  CompanySize,
+  GenerateCompanyRequest,
+  CompanyProfile,
+  GenerateCompanyResult,
+} from './generate.js';
+
 // DTOs
 export * from './dto/index.js';

@@ -1,4 +1,5 @@
 import type { DatabaseAdapter, Logger, ConsentRecord, ProviderCredentials } from '@arcim-sync/core';
+import type { AIConfig } from './ai/config.js';
 
 /** Hono environment type for V1 consent-based routes */
 export type AppEnv = {
@@ -39,4 +40,6 @@ export interface ServerOptions {
   onboardingBaseUrl?: string;
   /** Rate limiting configuration for V1 API routes */
   rateLimits?: { maxRequests: number; windowMs: number };
+  /** AI configuration for company generation (AWS Bedrock + LangSmith) */
+  aiConfig?: AIConfig;
 }
