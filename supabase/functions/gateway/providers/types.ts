@@ -1,6 +1,6 @@
 import type { ResourceType } from '../types/dto.ts';
 
-export type ProviderName = 'fortnox' | 'visma';
+export type ProviderName = 'fortnox' | 'visma' | 'briox';
 
 export interface RateLimitConfig {
   maxRequests: number;
@@ -37,4 +37,12 @@ export interface FortnoxResourceConfig extends ResourceConfig {
 export interface VismaResourceConfig extends ResourceConfig {
   supportsModifiedFilter: boolean;
   modifiedField?: string;
+}
+
+export interface BrioxResourceConfig extends ResourceConfig {
+  /** The key inside `data` that contains the array of items (e.g. "invoices", "customers") */
+  listKey: string;
+  supportsModifiedFilter: boolean;
+  /** Whether this endpoint is scoped by financial year (e.g. /journal/{year}) */
+  yearScoped?: boolean;
 }

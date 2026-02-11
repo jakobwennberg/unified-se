@@ -3,6 +3,7 @@ import { getDb } from '../lib/db.ts';
 import type { OAuthConfig, TokenResponse } from '../providers/types.ts';
 import { buildFortnoxAuthUrl, exchangeFortnoxCode, refreshFortnoxToken, revokeFortnoxToken } from '../providers/fortnox/oauth.ts';
 import { buildVismaAuthUrl, exchangeVismaCode, refreshVismaToken, revokeVismaToken } from '../providers/visma/oauth.ts';
+import { exchangeBrioxCode, refreshBrioxToken } from '../providers/briox/oauth.ts';
 
 const app = new Hono();
 
@@ -21,11 +22,18 @@ function getOAuthConfig(provider: string): OAuthConfig {
       redirectUri: Deno.env.get('VISMA_REDIRECT_URI') ?? '',
     };
   }
+  if (provider === 'briox') {
+    return {
+      clientId: Deno.env.get('BRIOX_CLIENT_ID') ?? '',
+      clientSecret: '',
+      redirectUri: '',
+    };
+  }
   throw new Error(`Unknown provider: ${provider}`);
 }
 
 function validateProvider(provider: string): boolean {
-  return provider === 'fortnox' || provider === 'visma';
+  return provider === 'fortnox' || provider === 'visma' || provider === 'briox';
 }
 
 // GET /api/v1/auth/:provider/url — get OAuth authorization URL
@@ -33,6 +41,10 @@ app.get('/:provider/url', async (c) => {
   const provider = c.req.param('provider');
   if (!validateProvider(provider)) {
     return c.json({ error: `Unsupported provider: ${provider}` }, 400);
+  }
+
+  if (provider === 'briox') {
+    return c.json({ error: 'Briox uses application tokens, not OAuth. Use the callback endpoint with an application token.' }, 400);
   }
 
   const config = getOAuthConfig(provider);
@@ -67,6 +79,8 @@ app.post('/:provider/exchange', async (c) => {
 
   if (provider === 'fortnox') {
     tokens = await exchangeFortnoxCode(config, code);
+  } else if (provider === 'briox') {
+    tokens = await exchangeBrioxCode(config.clientId, code);
   } else {
     tokens = await exchangeVismaCode(config, code);
   }
@@ -117,6 +131,8 @@ app.post('/:provider/callback', async (c) => {
 
   if (provider === 'fortnox') {
     tokens = await exchangeFortnoxCode(config, code);
+  } else if (provider === 'briox') {
+    tokens = await exchangeBrioxCode(config.clientId, code);
   } else {
     tokens = await exchangeVismaCode(config, code);
   }
@@ -182,6 +198,8 @@ app.post('/:provider/refresh', async (c) => {
 
   if (provider === 'fortnox') {
     tokens = await refreshFortnoxToken(config, tokenRows[0].refresh_token);
+  } else if (provider === 'briox') {
+    tokens = await refreshBrioxToken(config.clientId, tokenRows[0].refresh_token);
   } else {
     tokens = await refreshVismaToken(config, tokenRows[0].refresh_token);
   }
@@ -232,9 +250,10 @@ app.post('/:provider/revoke', async (c) => {
     const config = getOAuthConfig(provider);
     if (provider === 'fortnox') {
       await revokeFortnoxToken(config, tokenRows[0].refresh_token);
-    } else {
+    } else if (provider === 'visma') {
       await revokeVismaToken(config, tokenRows[0].refresh_token);
     }
+    // Briox: no revocation endpoint — just delete stored tokens
   }
 
   // Delete tokens

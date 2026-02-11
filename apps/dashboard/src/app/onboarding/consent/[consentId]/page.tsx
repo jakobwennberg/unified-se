@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 const PROVIDER_LABELS: Record<string, string> = {
   fortnox: 'Fortnox',
   visma: 'Visma eEkonomi',
+  briox: 'Briox',
   bokio: 'Bokio',
   bjornlunden: 'Bjorn Lunden',
 };
@@ -30,6 +31,7 @@ export default function OnboardingPage() {
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [applicationToken, setApplicationToken] = useState('');
 
   const fetchConsent = useCallback(async () => {
     try {
@@ -66,6 +68,33 @@ export default function OnboardingPage() {
 
       // Redirect browser to the provider's OAuth page
       window.location.href = data.url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setAccepting(false);
+    }
+  };
+
+  const handleBrioxConnect = async () => {
+    if (!consent || !applicationToken.trim()) return;
+    setAccepting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/proxy/api/v1/auth/briox/callback`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: applicationToken.trim(), consentId }),
+        },
+      );
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to connect Briox');
+      }
+
+      setDone(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong');
       setAccepting(false);
@@ -115,18 +144,52 @@ export default function OnboardingPage() {
               )}
             </div>
 
-            <p className="text-xs text-muted-foreground text-center">
-              By clicking Accept, you authorize read access to your accounting data.
-              You can revoke this at any time.
-            </p>
+            {consent.provider === 'briox' ? (
+              <>
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    To connect Briox, you need to generate an Application Token:
+                  </p>
+                  <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
+                    <li>Log into your Briox account</li>
+                    <li>Go to Admin &rarr; Users</li>
+                    <li>Click the gear icon next to your user</li>
+                    <li>Click &quot;Application Token&quot; to generate a token</li>
+                    <li>Copy and paste the token below</li>
+                  </ol>
+                  <input
+                    type="text"
+                    placeholder="Paste your Application Token here"
+                    value={applicationToken}
+                    onChange={(e) => setApplicationToken(e.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
 
-            <button
-              onClick={handleAccept}
-              disabled={accepting}
-              className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {accepting ? 'Accepting...' : 'Accept & Connect'}
-            </button>
+                <button
+                  onClick={handleBrioxConnect}
+                  disabled={accepting || !applicationToken.trim()}
+                  className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {accepting ? 'Connecting...' : 'Connect'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground text-center">
+                  By clicking Accept, you authorize read access to your accounting data.
+                  You can revoke this at any time.
+                </p>
+
+                <button
+                  onClick={handleAccept}
+                  disabled={accepting}
+                  className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {accepting ? 'Accepting...' : 'Accept & Connect'}
+                </button>
+              </>
+            )}
           </>
         )}
 

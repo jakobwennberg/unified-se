@@ -29,6 +29,7 @@ const STATUS_LABELS: Record<number, string> = {
 const PROVIDER_LABELS: Record<string, string> = {
   fortnox: 'Fortnox',
   visma: 'Visma eEkonomi',
+  briox: 'Briox',
   bokio: 'Bokio',
   bjornlunden: 'Bjorn Lunden',
 };
@@ -144,6 +145,7 @@ export default function ConsentsPage() {
               <Select value={createProvider} onChange={(e) => setCreateProvider(e.target.value)}>
                 <option value="fortnox">Fortnox</option>
                 <option value="visma">Visma eEkonomi</option>
+                <option value="briox">Briox</option>
               </Select>
             </div>
             <div className="space-y-2">
