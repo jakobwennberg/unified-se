@@ -1,0 +1,2417 @@
+openapi: 3.0.3
+info:
+  title: Bokio API
+  description: |
+    The Bokio API provides endpoints for interacting with the Bokio accounting platform.
+    
+    ## Authentication
+    - **Private Integrations**: Use Bearer token (API Token) in Authorization header
+    - **Public Integrations**: OAuth 2.0 with client credentials and authorization code grants
+    
+    ## Base URLs
+    - API: `https://api.bokio.se/v1`
+    
+    ## Rate Limits
+    Rate limits apply. Exceeding limits returns HTTP 429 with retry information.
+    
+    ## Filtering
+    Use `query` parameter with operators: `==`, `!=`, `~` (contains), `>`, `<`, `>=`, `<=`
+    Combine conditions with `&&`
+    
+    ## Pagination
+    Use `page` and `pageSize` query parameters. Default pageSize varies by endpoint.
+  version: "1.0.0"
+  contact:
+    email: support@bokio.se
+  x-logo:
+    url: https://files.readme.io/7db89d4-small-bokio_logo-primary_blue.png
+
+servers:
+  - url: https://api.bokio.se/v1
+    description: Production API
+
+tags:
+  - name: Authorization
+    description: OAuth 2.0 authentication endpoints
+  - name: Connections
+    description: Manage integration connections
+  - name: Journal Entries
+    description: Bookkeeping journal entry operations
+  - name: Uploads
+    description: Document upload management
+  - name: Customers
+    description: Customer management
+  - name: Invoices
+    description: Invoice operations
+  - name: Items
+    description: Product and service items for invoicing
+  - name: Fiscal Years
+    description: Fiscal year information
+  - name: SIE Files
+    description: Swedish SIE file export
+  - name: Bank Payments
+    description: Bank payment operations (elevated scope required)
+  - name: Credit Notes
+    description: Credit note management
+  - name: Chart of Accounts
+    description: Account information
+  - name: Company Information
+    description: Company details
+
+security:
+  - bearerAuth: []
+  - oauth2: []
+
+paths:
+  # ==================== AUTHORIZATION ====================
+  /token:
+    post:
+      tags:
+        - Authorization
+      summary: Obtain access token
+      description: |
+        Exchange credentials for access tokens using OAuth 2.0.
+        
+        **Grant Types:**
+        - `client_credentials`: For General API access
+        - `authorization_code`: For Company API access (use `code` parameter)
+        - `refresh_token`: Refresh an existing token
+      operationId: requestToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum: [client_credentials, authorization_code, refresh_token]
+                  description: OAuth grant type
+                code:
+                  type: string
+                  description: Authorization code (for authorization_code grant)
+                refresh_token:
+                  type: string
+                  description: Refresh token (for refresh_token grant)
+              required:
+                - grant_type
+      responses:
+        '200':
+          description: Token response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /authorize:
+    get:
+      tags:
+        - Authorization
+      summary: Authorize the client
+      description: |
+        Initiates OAuth 2.0 authorization flow. Redirect user to this endpoint.
+        User will be redirected back to `redirect_uri` with authorization code.
+      operationId: authorize
+      security: []
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Your application's client ID
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: URI to redirect after authorization
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Space-delimited scopes (e.g., "journal-entries:read invoices:write")
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Random string for CSRF protection
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [code]
+      responses:
+        '302':
+          description: Redirect to Bokio authorization page
+
+  # ==================== CONNECTIONS ====================
+  /connections:
+    get:
+      tags:
+        - Connections
+      summary: Get connections
+      description: List all active connections to your integration
+      operationId: getConnections
+      responses:
+        '200':
+          description: List of connections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Connection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /connections/{connectionId}:
+    get:
+      tags:
+        - Connections
+      summary: Get connection by ID
+      operationId: getConnectionById
+      parameters:
+        - $ref: '#/components/parameters/connectionId'
+      responses:
+        '200':
+          description: Connection details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Connections
+      summary: Delete connection by ID
+      operationId: deleteConnectionById
+      parameters:
+        - $ref: '#/components/parameters/connectionId'
+      responses:
+        '204':
+          description: Connection deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== JOURNAL ENTRIES ====================
+  /companies/{companyId}/journal-entries:
+    post:
+      tags:
+        - Journal Entries
+      summary: Create a journal entry
+      description: |
+        Create a new journal entry in the company's books.
+        The sum of debits must equal the sum of credits.
+      operationId: createJournalEntry
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JournalEntryCreate'
+      responses:
+        '201':
+          description: Journal entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      tags:
+        - Journal Entries
+      summary: Get journal entries
+      description: Retrieve paginated list of journal entries
+      operationId: getJournalEntries
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/query'
+      responses:
+        '200':
+          description: List of journal entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntryList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /companies/{companyId}/journal-entries/{journalEntryId}:
+    get:
+      tags:
+        - Journal Entries
+      summary: Get a journal entry
+      operationId: getJournalEntry
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/journalEntryId'
+      responses:
+        '200':
+          description: Journal entry details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /companies/{companyId}/journal-entries/{journalEntryId}/reverse:
+    post:
+      tags:
+        - Journal Entries
+      summary: Reverse a journal entry
+      description: Create a reversing entry for an existing journal entry
+      operationId: reverseJournalEntry
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/journalEntryId'
+      responses:
+        '200':
+          description: Reversing entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== UPLOADS ====================
+  /companies/{companyId}/uploads:
+    post:
+      tags:
+        - Uploads
+      summary: Add an upload
+      description: Upload a file (receipt, invoice) to the company
+      operationId: addUpload
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to upload
+                journalEntryId:
+                  type: string
+                  format: uuid
+                  description: Optional journal entry to link
+              required:
+                - file
+      responses:
+        '201':
+          description: Upload created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      tags:
+        - Uploads
+      summary: Get uploads
+      operationId: getUploads
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: List of uploads
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadList'
+
+  /companies/{companyId}/uploads/{uploadId}:
+    get:
+      tags:
+        - Uploads
+      summary: Get an upload
+      operationId: getUpload
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/uploadId'
+      responses:
+        '200':
+          description: Upload details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /companies/{companyId}/uploads/{uploadId}/download:
+    get:
+      tags:
+        - Uploads
+      summary: Download file data for an upload
+      operationId: downloadUpload
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/uploadId'
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== CUSTOMERS ====================
+  /companies/{companyId}/customers:
+    post:
+      tags:
+        - Customers
+      summary: Create a customer
+      operationId: createCustomer
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreate'
+            example:
+              type: company
+              name: "John Doe"
+              vatNumber: "SE1234567890"
+              orgNumber: "123456-7890"
+              paymentTerms: "30"
+              address:
+                line1: "Älvsborgsvägen 10"
+                city: "Göteborg"
+                postalCode: "123 45"
+                country: "SE"
+      responses:
+        '201':
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      tags:
+        - Customers
+      summary: Get customers
+      operationId: getCustomers
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/query'
+      responses:
+        '200':
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerList'
+
+  /companies/{companyId}/customers/{customerId}:
+    get:
+      tags:
+        - Customers
+      summary: Get a customer
+      operationId: getCustomer
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/customerId'
+      responses:
+        '200':
+          description: Customer details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - Customers
+      summary: Update a customer
+      operationId: updateCustomer
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/customerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerUpdate'
+      responses:
+        '200':
+          description: Customer updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Customers
+      summary: Delete a customer
+      operationId: deleteCustomer
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/customerId'
+      responses:
+        '204':
+          description: Customer deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== INVOICES ====================
+  /companies/{companyId}/invoices:
+    post:
+      tags:
+        - Invoices
+      summary: Create an invoice
+      operationId: createInvoice
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceCreate'
+            example:
+              type: invoice
+              customerRef:
+                id: "1e087e2f-0d8a-4f0f-8af3-870c1735e269"
+              currency: "SEK"
+              currencyRate: 1
+              invoiceDate: "2024-10-10"
+              dueDate: "2024-11-10"
+              lineItems:
+                - itemType: salesItem
+                  productType: goods
+                  unitType: hour
+                  quantity: 180
+                  description: "Consultancy services"
+                  unitPrice: 290
+                  taxRate: 25
+      responses:
+        '201':
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      tags:
+        - Invoices
+      summary: Get invoices
+      operationId: getInvoices
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/query'
+      responses:
+        '200':
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceList'
+
+  /companies/{companyId}/invoices/{invoiceId}:
+    get:
+      tags:
+        - Invoices
+      summary: Get an invoice
+      operationId: getInvoice
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      responses:
+        '200':
+          description: Invoice details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - Invoices
+      summary: Update an invoice
+      description: Update a draft invoice. Published invoices cannot be updated.
+      operationId: updateInvoice
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceUpdate'
+      responses:
+        '200':
+          description: Invoice updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          $ref: '#/components/responses/OperationNotAllowed'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /companies/{companyId}/invoices/{invoiceId}/line-items:
+    post:
+      tags:
+        - Invoices
+      summary: Add a line item to an invoice
+      operationId: addInvoiceLineItem
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LineItemCreate'
+            example:
+              itemType: salesItem
+              productType: goods
+              unitType: hour
+              quantity: 1
+              description: "New User Discount"
+              unitPrice: -500
+              taxRate: 25
+              bookkeepingAccountNumber: 3730
+      responses:
+        '201':
+          description: Line item added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /companies/{companyId}/invoices/{invoiceId}/publish:
+    post:
+      tags:
+        - Invoices
+      summary: Publish an invoice
+      description: Publish a draft invoice, making it official
+      operationId: publishInvoice
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      responses:
+        '200':
+          description: Invoice published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          $ref: '#/components/responses/OperationNotAllowed'
+
+  /companies/{companyId}/invoices/{invoiceId}/record:
+    post:
+      tags:
+        - Invoices
+      summary: Record an invoice
+      description: Bookkeep a published invoice
+      operationId: recordInvoice
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      responses:
+        '200':
+          description: Invoice recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          $ref: '#/components/responses/OperationNotAllowed'
+
+  /companies/{companyId}/invoices/{invoiceId}/credit:
+    post:
+      tags:
+        - Invoices
+      summary: Create a credit note
+      description: Create a draft credit note for an invoice
+      operationId: createCreditNote
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      responses:
+        '201':
+          description: Credit note created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditNote'
+
+  # ==================== INVOICE ATTACHMENTS ====================
+  /companies/{companyId}/invoices/{invoiceId}/attachments:
+    post:
+      tags:
+        - Invoices
+      summary: Add an attachment to an invoice
+      operationId: addInvoiceAttachment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        '201':
+          description: Attachment added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+    get:
+      tags:
+        - Invoices
+      summary: Get attachments
+      operationId: getInvoiceAttachments
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      responses:
+        '200':
+          description: List of attachments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+
+  /companies/{companyId}/invoices/{invoiceId}/attachments/{attachmentId}:
+    get:
+      tags:
+        - Invoices
+      summary: Get an attachment
+      operationId: getInvoiceAttachment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/attachmentId'
+      responses:
+        '200':
+          description: Attachment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Invoices
+      summary: Delete an attachment from an invoice
+      operationId: deleteInvoiceAttachment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/attachmentId'
+      responses:
+        '204':
+          description: Attachment deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /companies/{companyId}/invoices/{invoiceId}/attachments/{attachmentId}/download:
+    get:
+      tags:
+        - Invoices
+      summary: Download an attachment from an invoice
+      operationId: downloadInvoiceAttachment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/attachmentId'
+      responses:
+        '200':
+          description: Attachment file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  # ==================== INVOICE PAYMENTS ====================
+  /companies/{companyId}/invoices/{invoiceId}/payments:
+    post:
+      tags:
+        - Invoices
+      summary: Create an invoice payment
+      operationId: createInvoicePayment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoicePaymentCreate'
+            example:
+              date: "2024-11-01"
+              sumBaseCurrency: 64609.5
+              bookkeepingAccountNumber: 1940
+      responses:
+        '201':
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePayment'
+    get:
+      tags:
+        - Invoices
+      summary: Get invoice payments
+      operationId: getInvoicePayments
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      responses:
+        '200':
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InvoicePayment'
+
+  /companies/{companyId}/invoices/{invoiceId}/payments/{paymentId}:
+    get:
+      tags:
+        - Invoices
+      summary: Get an invoice payment
+      operationId: getInvoicePayment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/paymentId'
+      responses:
+        '200':
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePayment'
+    delete:
+      tags:
+        - Invoices
+      summary: Delete an invoice payment
+      operationId: deleteInvoicePayment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/paymentId'
+      responses:
+        '204':
+          description: Payment deleted
+
+  /companies/{companyId}/invoices/{invoiceId}/payments/{paymentId}/record:
+    post:
+      tags:
+        - Invoices
+      summary: Record an invoice payment
+      description: Bookkeep a payment
+      operationId: recordInvoicePayment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/paymentId'
+      responses:
+        '200':
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePayment'
+
+  # ==================== INVOICE SETTLEMENTS ====================
+  /companies/{companyId}/invoices/{invoiceId}/settlements:
+    post:
+      tags:
+        - Invoices
+      summary: Create an invoice settlement
+      description: Create a settlement (e.g., bank fee, currency adjustment)
+      operationId: createInvoiceSettlement
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceSettlementCreate'
+            example:
+              type: bankFee
+              invoiceSettlementDetails:
+                reason: bankFee
+                date: "2024-10-15"
+                sumBaseCurrency: 15.5
+      responses:
+        '201':
+          description: Settlement created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceSettlement'
+    get:
+      tags:
+        - Invoices
+      summary: Get invoice settlements
+      operationId: getInvoiceSettlements
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+      responses:
+        '200':
+          description: List of settlements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InvoiceSettlement'
+
+  /companies/{companyId}/invoices/{invoiceId}/settlements/{settlementId}:
+    get:
+      tags:
+        - Invoices
+      summary: Get an invoice settlement
+      operationId: getInvoiceSettlement
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/settlementId'
+      responses:
+        '200':
+          description: Settlement details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceSettlement'
+    delete:
+      tags:
+        - Invoices
+      summary: Delete an invoice settlement
+      operationId: deleteInvoiceSettlement
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/settlementId'
+      responses:
+        '204':
+          description: Settlement deleted
+
+  /companies/{companyId}/invoices/{invoiceId}/settlements/{settlementId}/record:
+    post:
+      tags:
+        - Invoices
+      summary: Record an invoice settlement
+      operationId: recordInvoiceSettlement
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/invoiceId'
+        - $ref: '#/components/parameters/settlementId'
+      responses:
+        '200':
+          description: Settlement recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceSettlement'
+
+  # ==================== ITEMS ====================
+  /companies/{companyId}/items:
+    post:
+      tags:
+        - Items
+      summary: Create an item
+      operationId: createItem
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemCreate'
+      responses:
+        '201':
+          description: Item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+    get:
+      tags:
+        - Items
+      summary: Get items
+      operationId: getItems
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: List of items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemList'
+
+  /companies/{companyId}/items/{itemId}:
+    get:
+      tags:
+        - Items
+      summary: Get an item
+      operationId: getItem
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/itemId'
+      responses:
+        '200':
+          description: Item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+    put:
+      tags:
+        - Items
+      summary: Update an item
+      operationId: updateItem
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/itemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemUpdate'
+      responses:
+        '200':
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+    delete:
+      tags:
+        - Items
+      summary: Delete an item
+      operationId: deleteItem
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/itemId'
+      responses:
+        '204':
+          description: Item deleted
+
+  # ==================== FISCAL YEARS ====================
+  /companies/{companyId}/fiscal-years:
+    get:
+      tags:
+        - Fiscal Years
+      summary: Get fiscal years
+      operationId: getFiscalYears
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      responses:
+        '200':
+          description: List of fiscal years
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FiscalYearList'
+
+  /companies/{companyId}/fiscal-years/{fiscalYearId}:
+    get:
+      tags:
+        - Fiscal Years
+      summary: Get a fiscal year
+      operationId: getFiscalYear
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/fiscalYearId'
+      responses:
+        '200':
+          description: Fiscal year details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FiscalYear'
+
+  # ==================== SIE FILES ====================
+  /companies/{companyId}/fiscal-years/{fiscalYearId}/sie-file:
+    get:
+      tags:
+        - SIE Files
+      summary: Download SIE file for a fiscal year
+      description: Download Swedish standard SIE accounting file
+      operationId: downloadSieFile
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/fiscalYearId'
+      responses:
+        '200':
+          description: SIE file content
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  # ==================== BANK PAYMENTS ====================
+  /companies/{companyId}/bank-payments:
+    post:
+      tags:
+        - Bank Payments
+      summary: Create a bank payment
+      description: |
+        Create a bank payment (requires elevated scope).
+        Payments must be signed with BankID by authorized signatory.
+      operationId: createBankPayment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankPaymentCreate'
+      responses:
+        '201':
+          description: Bank payment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankPayment'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      tags:
+        - Bank Payments
+      summary: Get bank payments
+      description: Get payments created by your integration (limited scope)
+      operationId: getBankPayments
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: List of bank payments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankPaymentList'
+
+  /companies/{companyId}/bank-payments/{bankPaymentId}:
+    get:
+      tags:
+        - Bank Payments
+      summary: Get a bank payment created by the integration
+      operationId: getBankPayment
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/bankPaymentId'
+      responses:
+        '200':
+          description: Bank payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankPayment'
+
+  # ==================== CREDIT NOTES ====================
+  /companies/{companyId}/credit-notes:
+    get:
+      tags:
+        - Credit Notes
+      summary: List credit notes
+      operationId: listCreditNotes
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - $ref: '#/components/parameters/query'
+      responses:
+        '200':
+          description: List of credit notes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditNoteList'
+
+  /companies/{companyId}/credit-notes/{creditNoteId}:
+    get:
+      tags:
+        - Credit Notes
+      summary: Get a credit note
+      operationId: getCreditNote
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/creditNoteId'
+      responses:
+        '200':
+          description: Credit note details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditNote'
+    put:
+      tags:
+        - Credit Notes
+      summary: Update a credit note
+      operationId: updateCreditNote
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/creditNoteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditNoteUpdate'
+      responses:
+        '200':
+          description: Credit note updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditNote'
+
+  /companies/{companyId}/credit-notes/{creditNoteId}/publish:
+    post:
+      tags:
+        - Credit Notes
+      summary: Publish a credit note
+      operationId: publishCreditNote
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/creditNoteId'
+      responses:
+        '200':
+          description: Credit note published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditNote'
+
+  /companies/{companyId}/credit-notes/{creditNoteId}/record:
+    post:
+      tags:
+        - Credit Notes
+      summary: Record a credit note
+      operationId: recordCreditNote
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - $ref: '#/components/parameters/creditNoteId'
+      responses:
+        '200':
+          description: Credit note recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditNote'
+
+  # ==================== CHART OF ACCOUNTS ====================
+  /companies/{companyId}/chart-of-accounts:
+    get:
+      tags:
+        - Chart of Accounts
+      summary: Get chart of accounts
+      operationId: getChartOfAccounts
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      responses:
+        '200':
+          description: List of accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+
+  /companies/{companyId}/chart-of-accounts/{accountNumber}:
+    get:
+      tags:
+        - Chart of Accounts
+      summary: Get specific account
+      operationId: getAccount
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+        - name: accountNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Account number (e.g., 1930, 3000)
+      responses:
+        '200':
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+
+  # ==================== COMPANY INFORMATION ====================
+  /companies/{companyId}:
+    get:
+      tags:
+        - Company Information
+      summary: Retrieve company information
+      operationId: getCompanyInformation
+      parameters:
+        - $ref: '#/components/parameters/companyId'
+      responses:
+        '200':
+          description: Company information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyInformation'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: API token for private integrations
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://api.bokio.se/v1/authorize
+          tokenUrl: https://api.bokio.se/v1/token
+          scopes:
+            journal-entries:read: Read journal entries
+            journal-entries:write: Write journal entries
+            uploads:read: Read uploads
+            uploads:write: Write uploads
+            invoices:read: Read invoices
+            invoices:write: Write invoices
+            credit-notes:read: Read credit notes
+            credit-notes:write: Write credit notes
+            customers:read: Read customers
+            customers:write: Write customers
+            items:read: Read items
+            items:write: Write items
+            sie:read: Read SIE files
+            fiscal-years:read: Read fiscal years
+            bank-payments:read-limited: Read bank payments (elevated)
+            bank-payments:write: Write bank payments (elevated)
+
+  parameters:
+    companyId:
+      name: companyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Company ID (UUID)
+    connectionId:
+      name: connectionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    journalEntryId:
+      name: journalEntryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    uploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    customerId:
+      name: customerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    invoiceId:
+      name: invoiceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    attachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    paymentId:
+      name: paymentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    settlementId:
+      name: settlementId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    itemId:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    fiscalYearId:
+      name: fiscalYearId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    bankPaymentId:
+      name: bankPaymentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    creditNoteId:
+      name: creditNoteId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number
+    pageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+      description: Items per page
+    query:
+      name: query
+      in: query
+      schema:
+        type: string
+      description: |
+        Filter query using operators:
+        - `==` equals
+        - `!=` not equals
+        - `~` contains
+        - `>`, `<`, `>=`, `<=` comparisons
+        
+        Combine with `&&`. Example: `status==pending&&totalAmount>100`
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Forbidden - insufficient permissions or elevated scope required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: "The requested resource was not found"
+            code: "not-found"
+            bokioErrorId: "2f3fa960-3def-45ce-8cf3-28d33ac76fd7"
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+          example:
+            message: "Validation failed with 1 error"
+            code: "validation-error"
+            bokioErrorId: "2ddf3c8f-c83a-4eb2-a28f-8f6f50425947"
+            errors:
+              - field: "#/lineItems/0/taxRate"
+                message: "The tax rate field must be one of the following values: 0%, 6%, 12%, or 25%"
+    OperationNotAllowed:
+      description: Operation not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: "The invoice could not be updated because it was not in draft state"
+            code: "operation-not-allowed"
+            bokioErrorId: "3fd4d194-5361-4876-a641-cc5cb98fd548"
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    # ==================== AUTH ====================
+    TokenResponse:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        tenant_type:
+          type: string
+          enum: [company]
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum: [bearer]
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds
+        refresh_token:
+          type: string
+
+    Connection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        tenantType:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    # ==================== ERRORS ====================
+    Error:
+      type: object
+      required:
+        - message
+        - code
+        - bokioErrorId
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+          enum:
+            - not-found
+            - validation-error
+            - operation-not-allowed
+            - internal-server-error
+            - limit-exceeded
+        bokioErrorId:
+          type: string
+          format: uuid
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    description: JSON Pointer to the field (e.g., "#/lineItems/0/taxRate")
+                  message:
+                    type: string
+
+    # ==================== JOURNAL ENTRIES ====================
+    JournalEntryCreate:
+      type: object
+      required:
+        - date
+        - title
+        - items
+      properties:
+        date:
+          type: string
+          format: date
+        title:
+          type: string
+        items:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/JournalEntryItemCreate'
+
+    JournalEntryItemCreate:
+      type: object
+      required:
+        - accountNumber
+      properties:
+        accountNumber:
+          type: integer
+          description: Account from chart of accounts (e.g., 1930, 6570)
+        debit:
+          type: number
+          format: decimal
+        credit:
+          type: number
+          format: decimal
+        description:
+          type: string
+
+    JournalEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        title:
+          type: string
+        number:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalEntryItem'
+        createdAt:
+          type: string
+          format: date-time
+
+    JournalEntryItem:
+      type: object
+      properties:
+        accountNumber:
+          type: integer
+        debit:
+          type: number
+        credit:
+          type: number
+        description:
+          type: string
+
+    JournalEntryList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ==================== UPLOADS ====================
+    Upload:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        contentType:
+          type: string
+        journalEntryId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    UploadList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Upload'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ==================== CUSTOMERS ====================
+    Address:
+      type: object
+      properties:
+        line1:
+          type: string
+        line2:
+          type: string
+          nullable: true
+        city:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code
+
+    CustomerCreate:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [company, individual]
+        vatNumber:
+          type: string
+        orgNumber:
+          type: string
+        paymentTerms:
+          type: string
+          description: Payment terms in days (e.g., "30")
+        address:
+          $ref: '#/components/schemas/Address'
+        contactsDetails:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactDetail'
+
+    CustomerUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        vatNumber:
+          type: string
+        orgNumber:
+          type: string
+        paymentTerms:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [company, individual]
+        vatNumber:
+          type: string
+          nullable: true
+        orgNumber:
+          type: string
+          nullable: true
+        paymentTerms:
+          type: string
+          nullable: true
+        address:
+          $ref: '#/components/schemas/Address'
+        contactsDetails:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactDetail'
+        language:
+          type: string
+          description: Language code (e.g., "sv")
+
+    ContactDetail:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        name:
+          type: string
+
+    CustomerList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Customer'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ==================== INVOICES ====================
+    CustomerRef:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          readOnly: true
+
+    LineItemCreate:
+      type: object
+      required:
+        - description
+      properties:
+        itemType:
+          type: string
+          enum: [salesItem, descriptionOnly]
+          default: salesItem
+        productType:
+          type: string
+          enum: [goods, service]
+        unitType:
+          type: string
+          description: Unit code (e.g., "hour", "st", "kg")
+        quantity:
+          type: number
+          default: 1
+        description:
+          type: string
+        unitPrice:
+          type: number
+          format: decimal
+          description: Unit price excluding VAT (can be negative for discounts)
+        taxRate:
+          type: number
+          enum: [0, 6, 12, 25]
+          description: VAT rate percentage
+        bookkeepingAccountNumber:
+          type: integer
+          description: Override account number for bookkeeping
+        itemRef:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+          description: Reference to an Item
+
+    LineItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        description:
+          type: string
+        quantity:
+          type: number
+        unitPrice:
+          type: number
+        taxRate:
+          type: number
+        itemType:
+          type: string
+        productType:
+          type: string
+        unitType:
+          type: string
+
+    InvoiceCreate:
+      type: object
+      required:
+        - type
+        - customerRef
+        - lineItems
+      properties:
+        type:
+          type: string
+          enum: [invoice, cash]
+        customerRef:
+          $ref: '#/components/schemas/CustomerRef'
+        currency:
+          type: string
+          default: SEK
+          description: ISO 4217 currency code
+        currencyRate:
+          type: number
+          default: 1
+        invoiceDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        lineItems:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LineItemCreate'
+        orderNumberReference:
+          type: string
+        deliveryAddress:
+          $ref: '#/components/schemas/Address'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    InvoiceUpdate:
+      type: object
+      properties:
+        invoiceDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        orderNumberReference:
+          type: string
+        deliveryAddress:
+          $ref: '#/components/schemas/Address'
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [invoice, cash]
+        customerRef:
+          $ref: '#/components/schemas/CustomerRef'
+        invoiceNumber:
+          type: string
+          nullable: true
+          description: Assigned after publishing
+        currency:
+          type: string
+        currencyRate:
+          type: number
+        totalAmount:
+          type: number
+          description: Total including VAT
+        totalTax:
+          type: number
+        paidAmount:
+          type: number
+        status:
+          type: string
+          enum: [draft, published, paid, overdue, cancelled]
+        invoiceDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        publishedDateTime:
+          type: string
+          format: date-time
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItem'
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachmentRef'
+        journalEntryRef:
+          $ref: '#/components/schemas/JournalEntryRef'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    InvoiceList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ==================== ATTACHMENTS ====================
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+
+    AttachmentRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+
+    # ==================== PAYMENTS & SETTLEMENTS ====================
+    InvoicePaymentCreate:
+      type: object
+      required:
+        - date
+        - sumBaseCurrency
+      properties:
+        date:
+          type: string
+          format: date
+        sumBaseCurrency:
+          type: number
+          format: decimal
+        bookkeepingAccountNumber:
+          type: integer
+          default: 1930
+          description: Bank account number (default 1930)
+
+    InvoicePayment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        sumBaseCurrency:
+          type: number
+        bookkeepingAccountNumber:
+          type: integer
+        journalEntryRef:
+          $ref: '#/components/schemas/JournalEntryRef'
+
+    InvoiceSettlementCreate:
+      type: object
+      required:
+        - type
+        - invoiceSettlementDetails
+      properties:
+        type:
+          type: string
+          enum: [bankFee, currency]
+        invoiceSettlementDetails:
+          type: object
+          required:
+            - date
+            - sumBaseCurrency
+          properties:
+            reason:
+              type: string
+              enum: [bankFee, currencyGain, currencyLoss]
+            date:
+              type: string
+              format: date
+            sumBaseCurrency:
+              type: number
+              format: decimal
+              description: Amount (negative increases outstanding)
+
+    InvoiceSettlement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [bankFee, currency]
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceSettlementDetails:
+          type: object
+          properties:
+            date:
+              type: string
+              format: date
+            sumBaseCurrency:
+              type: number
+        journalEntryRef:
+          $ref: '#/components/schemas/JournalEntryRef'
+
+    JournalEntryRef:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: string
+          format: uuid
+
+    # ==================== ITEMS ====================
+    ItemCreate:
+      type: object
+      required:
+        - name
+        - itemType
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        itemType:
+          type: string
+          enum: [salesItem, descriptionOnly]
+        productType:
+          type: string
+          enum: [goods, service]
+        unitType:
+          type: string
+        unitPrice:
+          type: number
+        taxRate:
+          type: number
+          enum: [0, 6, 12, 25]
+        bookkeepingAccountNumber:
+          type: integer
+
+    ItemUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        unitPrice:
+          type: number
+        taxRate:
+          type: number
+        bookkeepingAccountNumber:
+          type: integer
+
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        itemType:
+          type: string
+        productType:
+          type: string
+        unitType:
+          type: string
+        unitPrice:
+          type: number
+        taxRate:
+          type: number
+        bookkeepingAccountNumber:
+          type: integer
+
+    ItemList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Item'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ==================== FISCAL YEARS ====================
+    FiscalYear:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        accountingMethod:
+          type: string
+          enum: [cash, invoice]
+        isActive:
+          type: boolean
+
+    FiscalYearList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FiscalYear'
+
+    # ==================== BANK PAYMENTS ====================
+    BankPaymentCreate:
+      type: object
+      required:
+        - amount
+        - recipientType
+      properties:
+        amount:
+          type: number
+          format: decimal
+        recipientType:
+          type: string
+          enum: [bankgiro, plusgiro, bankAccount]
+        recipientNumber:
+          type: string
+        message:
+          type: string
+        paymentDate:
+          type: string
+          format: date
+
+    BankPayment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        recipientType:
+          type: string
+        recipientNumber:
+          type: string
+        status:
+          type: string
+          enum: [pending, signed, completed, failed]
+        paymentDate:
+          type: string
+          format: date
+
+    BankPaymentList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BankPayment'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ==================== CREDIT NOTES ====================
+    CreditNote:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        creditNoteNumber:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, published]
+        totalAmount:
+          type: number
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItem'
+        journalEntryRef:
+          $ref: '#/components/schemas/JournalEntryRef'
+
+    CreditNoteUpdate:
+      type: object
+      properties:
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItemCreate'
+
+    CreditNoteList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditNote'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ==================== CHART OF ACCOUNTS ====================
+    Account:
+      type: object
+      properties:
+        number:
+          type: integer
+          description: Account number
+        name:
+          type: string
+        category:
+          type: string
+          enum: [asset, liability, income, cost]
+        isActive:
+          type: boolean
+
+    AccountList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+
+    # ==================== COMPANY ====================
+    CompanyInformation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        orgNumber:
+          type: string
+        vatNumber:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+        currency:
+          type: string
+        country:
+          type: string
+
+    # ==================== COMMON ====================
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalPages:
+          type: integer
+        totalCount:
+          type: integer
+
+    Metadata:
+      type: object
+      description: |
+        Custom key-value data for integrations.
+        Max 10 keys, each key max 25 characters.
+      additionalProperties:
+        type: string
+        maxLength: 500
+      maxProperties: 10
+      example:
+        externalId: "EXT-12345"
+        source: "my-integration"

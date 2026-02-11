@@ -1,0 +1,60 @@
+{
+  "name": "@arcim-sync/core",
+  "version": "0.1.0",
+  "description": "Core library for Swedish accounting provider sync — types, providers, SIE parser, sync engine",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./sie": {
+      "types": "./dist/sie/index.d.ts",
+      "import": "./dist/sie/index.js",
+      "require": "./dist/sie/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "drizzle-orm": "^0.45.1",
+    "iconv-lite": "^0.7.2",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.2.2",
+    "tsup": "^8.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "keywords": [
+    "swedish",
+    "accounting",
+    "fortnox",
+    "visma",
+    "bokio",
+    "bjornlunden",
+    "sie",
+    "sync"
+  ],
+  "license": "MIT"
+}

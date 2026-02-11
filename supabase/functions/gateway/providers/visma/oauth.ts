@@ -1,0 +1,106 @@
+import { VISMA_AUTH_URL, VISMA_TOKEN_URL, VISMA_REVOKE_URL } from './config.ts';
+import type { OAuthConfig, TokenResponse } from '../types.ts';
+
+const DEFAULT_SCOPES = [
+  'ea:api',
+  'offline_access',
+  'ea:sales_readonly',
+  'ea:accounting_readonly',
+  'ea:purchase_readonly',
+];
+
+const EACCOUNTING_ACR_VALUE = 'service:44643EB1-3F76-4C1C-A672-402AE8085934';
+
+export function buildVismaAuthUrl(
+  config: OAuthConfig,
+  options?: { scopes?: string[]; state?: string; acrValues?: string },
+): string {
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: 'code',
+    acr_values: options?.acrValues ?? EACCOUNTING_ACR_VALUE,
+  });
+
+  const scopes = options?.scopes?.length ? options.scopes : DEFAULT_SCOPES;
+  params.set('scope', scopes.join(' '));
+
+  if (options?.state) {
+    params.set('state', options.state);
+  }
+
+  return `${VISMA_AUTH_URL}?${params.toString()}`;
+}
+
+function basicAuthHeader(config: OAuthConfig): string {
+  const encoded = btoa(`${config.clientId}:${config.clientSecret}`);
+  return `Basic ${encoded}`;
+}
+
+export async function exchangeVismaCode(
+  config: OAuthConfig,
+  code: string,
+): Promise<TokenResponse> {
+  const response = await fetch(VISMA_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: basicAuthHeader(config),
+    },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: config.redirectUri,
+    }).toString(),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Visma token exchange failed: ${response.status} ${body}`);
+  }
+
+  return response.json() as Promise<TokenResponse>;
+}
+
+export async function refreshVismaToken(
+  config: OAuthConfig,
+  refreshToken: string,
+): Promise<TokenResponse> {
+  const response = await fetch(VISMA_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: basicAuthHeader(config),
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }).toString(),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Visma token refresh failed: ${response.status} ${body}`);
+  }
+
+  return response.json() as Promise<TokenResponse>;
+}
+
+export async function revokeVismaToken(
+  config: OAuthConfig,
+  refreshToken: string,
+): Promise<boolean> {
+  const response = await fetch(VISMA_REVOKE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: basicAuthHeader(config),
+    },
+    body: new URLSearchParams({
+      token: refreshToken,
+      token_type_hint: 'refresh_token',
+    }).toString(),
+  });
+
+  return response.ok;
+}

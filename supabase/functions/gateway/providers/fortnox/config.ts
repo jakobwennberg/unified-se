@@ -1,0 +1,83 @@
+import { ResourceType } from '../../types/dto.ts';
+import type { FortnoxResourceConfig, RateLimitConfig } from '../types.ts';
+import {
+  mapFortnoxToSalesInvoice,
+  mapFortnoxToSupplierInvoice,
+  mapFortnoxToCustomer,
+  mapFortnoxToSupplier,
+  mapFortnoxToJournal,
+  mapFortnoxToAccountingAccount,
+  mapFortnoxToCompanyInformation,
+} from './mapper.ts';
+
+export const FORTNOX_BASE_URL = 'https://api.fortnox.se/3';
+export const FORTNOX_AUTH_URL = 'https://apps.fortnox.se/oauth-v1/auth';
+export const FORTNOX_TOKEN_URL = 'https://apps.fortnox.se/oauth-v1/token';
+export const FORTNOX_RATE_LIMIT: RateLimitConfig = { maxRequests: 25, windowMs: 1000 };
+
+export const FORTNOX_RESOURCE_CONFIGS: Partial<Record<ResourceType, FortnoxResourceConfig>> = {
+  [ResourceType.SalesInvoices]: {
+    listEndpoint: '/invoices',
+    listKey: 'Invoices',
+    detailEndpoint: '/invoices/{id}',
+    detailKey: 'Invoice',
+    idField: 'DocumentNumber',
+    mapper: mapFortnoxToSalesInvoice,
+    supportsLastModified: true,
+  },
+  [ResourceType.SupplierInvoices]: {
+    listEndpoint: '/supplierinvoices',
+    listKey: 'SupplierInvoices',
+    detailEndpoint: '/supplierinvoices/{id}',
+    detailKey: 'SupplierInvoice',
+    idField: 'GivenNumber',
+    mapper: mapFortnoxToSupplierInvoice,
+    supportsLastModified: true,
+  },
+  [ResourceType.Customers]: {
+    listEndpoint: '/customers',
+    listKey: 'Customers',
+    detailEndpoint: '/customers/{id}',
+    detailKey: 'Customer',
+    idField: 'CustomerNumber',
+    mapper: mapFortnoxToCustomer,
+    supportsLastModified: true,
+  },
+  [ResourceType.Suppliers]: {
+    listEndpoint: '/suppliers',
+    listKey: 'Suppliers',
+    detailEndpoint: '/suppliers/{id}',
+    detailKey: 'Supplier',
+    idField: 'SupplierNumber',
+    mapper: mapFortnoxToSupplier,
+    supportsLastModified: true,
+  },
+  [ResourceType.Journals]: {
+    listEndpoint: '/vouchers',
+    listKey: 'Vouchers',
+    detailEndpoint: '/vouchers/{id}',
+    detailKey: 'Voucher',
+    idField: 'VoucherNumber',
+    mapper: mapFortnoxToJournal,
+    supportsLastModified: false,
+  },
+  [ResourceType.AccountingAccounts]: {
+    listEndpoint: '/accounts',
+    listKey: 'Accounts',
+    detailEndpoint: '/accounts/{id}',
+    detailKey: 'Account',
+    idField: 'Number',
+    mapper: mapFortnoxToAccountingAccount,
+    supportsLastModified: false,
+  },
+  [ResourceType.CompanyInformation]: {
+    listEndpoint: '/companyinformation',
+    listKey: 'CompanyInformation',
+    detailEndpoint: '/companyinformation',
+    detailKey: 'CompanyInformation',
+    idField: 'OrganizationNumber',
+    mapper: mapFortnoxToCompanyInformation,
+    supportsLastModified: false,
+    singleton: true,
+  },
+};

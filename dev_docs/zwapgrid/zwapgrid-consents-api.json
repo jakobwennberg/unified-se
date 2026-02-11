@@ -1,0 +1,872 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Consents API",
+    "description": "Use the Consents API to create Consent, and then use the Consent ID to invite Your Customer to onboard through the Onboarding Flow.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://apione.zwapgrid.com/consents"
+    }
+  ],
+  "paths": {
+    "/api/v1/consents/{consentId}": {
+      "get": {
+        "tags": [
+          "Consents"
+        ],
+        "summary": "Get a consent",
+        "description": "This endpoint returns an individual consent.",
+        "operationId": "GetConsent",
+        "parameters": [
+          {
+            "name": "consentId",
+            "in": "path",
+            "description": "The id of the consent you wish to get.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-correlation-id",
+            "in": "header",
+            "description": "A unique GUID that can be used to track this request.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a consent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The consent does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Consents"
+        ],
+        "summary": "Update a consent",
+        "description": "This endpoint updates an existing consent.",
+        "operationId": "PatchConsent",
+        "parameters": [
+          {
+            "name": "consentId",
+            "in": "path",
+            "description": "The id of the consent you wish to update.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "This is the value of the ETag returned as a header from the \"Get a consent\" endpoint.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-correlation-id",
+            "in": "header",
+            "description": "A unique GUID that can be used to track this request.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConsentDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConsentDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConsentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The consent was updated successfully."
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The consent does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match header does not match Etag - this means that the resource has been changed and now has a different Etag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Consents"
+        ],
+        "summary": "Delete a consent",
+        "description": "This endpoint deletes an existing consent.",
+        "operationId": "DeleteConsent",
+        "parameters": [
+          {
+            "name": "consentId",
+            "in": "path",
+            "description": "The id of the consent you wish to delete.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-correlation-id",
+            "in": "header",
+            "description": "A unique GUID that can be used to track this request.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "If consent is removed"
+          },
+          "400": {
+            "description": "If request is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/consents": {
+      "get": {
+        "tags": [
+          "Consents"
+        ],
+        "summary": "List consents",
+        "description": "This endpoint returns a list of consents.",
+        "operationId": "GetConsents",
+        "parameters": [
+          {
+            "name": "x-correlation-id",
+            "in": "header",
+            "description": "A unique GUID that can be used to track this request.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Count",
+            "in": "query",
+            "description": "The number of records that you want to return per page.",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CurrentPage",
+            "in": "query",
+            "description": "The page that you want to return results for.",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CreatedOn",
+            "in": "query",
+            "description": "The creation date that you wish to return consents for, in the following format: \"yyyy-MM-dd\"",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "UpdatedOn",
+            "in": "query",
+            "description": "The last update date that you wish to return consents for, in the following format: \"yyyy-MM-dd\"",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "The order in which you wish to return results.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Status",
+            "in": "query",
+            "description": "The status of consents you wish to return results.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Source",
+            "in": "query",
+            "description": "The source of consents you wish to return results.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "IsTest",
+            "in": "query",
+            "description": "The type consents you wish to return results, is test or not.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "SystemSettingsId",
+            "in": "query",
+            "description": "The system settings id of consents you wish to return results.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Name",
+            "in": "query",
+            "description": "The name of consents you wish to return results.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a list of consents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentDtoPagedResultDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The client does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Consents"
+        ],
+        "summary": "Create a consent",
+        "description": "This endpoint creates a new consent.",
+        "operationId": "PostConsent",
+        "parameters": [
+          {
+            "name": "x-correlation-id",
+            "in": "header",
+            "description": "A unique GUID that can be used to track this request.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConsentDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConsentDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConsentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The consent was created."
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The consent does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/consents/{consentId}/otc": {
+      "post": {
+        "tags": [
+          "Consents"
+        ],
+        "summary": "Create a one-time code",
+        "description": "This endpoint creates one-time code.",
+        "operationId": "PostOtc",
+        "parameters": [
+          {
+            "name": "consentId",
+            "in": "path",
+            "description": "The id of the consent you wish to create an OTC for.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-correlation-id",
+            "in": "header",
+            "description": "A unique GUID that can be used to track this request.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "One-time code was created successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtcDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not authorised to access this API endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The consent does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/consents/auth/token": {
+      "post": {
+        "tags": [
+          "Consents"
+        ],
+        "summary": "Exchange otc for access token",
+        "operationId": "ExchangeOtc",
+        "parameters": [
+          {
+            "name": "x-correlation-id",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangeOtcDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangeOtcDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangeOtcDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessTokenDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccessTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConsentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the Consent",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the Consent",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConsentStatus"
+          },
+          "source": {
+            "type": "string",
+            "description": " The source of the consent (i.e. what system has been connected)\r\n \r\n| Accounting System | Source |\r\n|------|------|\r\n|Fortnox|fortnox|\r\n|Visma eAccounting|vismaeaccounting|\r\n|Bjorn Lunden|bjornlunden|\r\n|Procountor|procountor|\r\n|Visma e‑conomic|vismaeconomic|\r\n|Test.1|testone|\r\n|Visma Dinero|vismadinero|\r\n|Billy|billy|\r\n|File.1|fileone|",
+            "nullable": true
+          },
+          "systemSettingsId": {
+            "type": "string",
+            "description": "Id of the system settings used for consent (i.e. what FileOne fields are required)",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdOn": {
+            "type": "string",
+            "description": "The date the consent was created on",
+            "format": "date-time"
+          },
+          "updatedOn": {
+            "type": "string",
+            "description": "The date the consent was updated on",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConsentDtoPagedResultDto": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/PagedResultMetadataDto"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConsentStatus": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "CreateConsentDto": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "systemsSettings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExchangeOtcDto": {
+        "type": "object",
+        "properties": {
+          "grantType": {
+            "type": "string",
+            "nullable": true
+          },
+          "consentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OtcDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PagedResultMetadataDto": {
+        "type": "object",
+        "properties": {
+          "totalResources": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "currentPage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": { }
+      },
+      "UpdateConsentDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ConsentStatus"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "description": "You must generate an API Key by logging into the [Client Portal](https://clients.zwapgrid.com).<br/><br/>You should use the API Key when calling all API endpoints in API.1.",
+        "name": "x-api-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKey": [ ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "Consents",
+      "description": " Consents are the link between your Customer in your System and their connection to a System in API.1. \r\n\r\n The Consent can exist in one of the statuses defined below:\r\n \r\n |Status|Value|Description|\r\n |------|------|------|\r\n |CREATED|0|The Consent has this status as soon as it is created via the API.|\r\n |ACCEPTED|1|The Consent has this status as soon as Your Customer successfully connects their Accounting System.|\r\n |REVOKED|2|The Consent has this status if you update it, for example, by allowing Your Customer to revoke their Consent.|\r\n |INACTIVE|3|The Consent has this status if the underlying connection is no longer able to connect to the Accounting System.|\r\n \r\n The Accounting System is one of the systems that we have mapped to, as defined below.\r\n \r\n| Accounting System | Source |\r\n|------|------|\r\n|Fortnox|fortnox|\r\n|Visma eAccounting|vismaeaccounting|\r\n|Bjorn Lunden|bjornlunden|\r\n|Procountor|procountor|\r\n|Visma e‑conomic|vismaeconomic|\r\n|Test.1|testone|\r\n|Visma Dinero|vismadinero|\r\n|Billy|billy|\r\n|File.1|fileone|"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@arcim-sync/example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example app with docker-compose (Postgres + Hono server)",
+  "scripts": {}
+}
