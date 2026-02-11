@@ -60,6 +60,15 @@ export const FORTNOX_RESOURCE_CONFIGS: Partial<Record<ResourceType, FortnoxResou
     idField: 'VoucherNumber',
     mapper: mapFortnoxToJournal,
     supportsLastModified: false,
+    supportsEntryHydration: true,
+    resolveDetailPath: (resourceId, query) => {
+      const dashIdx = resourceId.indexOf('-');
+      const series = dashIdx >= 0 ? resourceId.slice(0, dashIdx) : resourceId;
+      const number = dashIdx >= 0 ? resourceId.slice(dashIdx + 1) : resourceId;
+      const fy = query?.['financialyear'] ?? '';
+      const params = fy ? `?financialyear=${fy}` : '';
+      return `/vouchers/${series}/${number}${params}`;
+    },
   },
   [ResourceType.AccountingAccounts]: {
     listEndpoint: '/accounts',

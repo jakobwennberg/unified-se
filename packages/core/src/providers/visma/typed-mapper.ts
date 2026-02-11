@@ -98,15 +98,21 @@ export function mapVismaToSupplierInvoice(raw: Record<string, unknown>): Supplie
   const total = raw['TotalAmount'] as number ?? 0;
   const remaining = raw['RemainingAmount'] as number ?? 0;
 
+  // Visma supplier invoice rows are bookkeeping entries with DebetAmount/CreditAmount
+  // (note: Swedish spelling "Debet"), not product lines like customer invoices.
   const rows = (raw['Rows'] as Record<string, unknown>[] | undefined) ?? [];
-  const lines: SupplierInvoiceLineDto[] = rows.map((row, idx) => ({
-    id: String(row['LineNumber'] ?? idx + 1),
-    description: row['Text'] as string | undefined,
-    quantity: row['Quantity'] as number | undefined,
-    unitPrice: row['UnitPrice'] != null ? amount(row['UnitPrice'] as number, currency) : undefined,
-    lineExtensionAmount: amount(row['LineTotal'] as number ?? 0, currency),
-    accountNumber: row['AccountNumber'] != null ? String(row['AccountNumber']) : undefined,
-  }));
+  const lines: SupplierInvoiceLineDto[] = rows.map((row, idx) => {
+    const debit = (row['DebetAmount'] as number) ?? 0;
+    const credit = (row['CreditAmount'] as number) ?? 0;
+    const rowAmount = debit || credit;
+    return {
+      id: String(row['LineNumber'] ?? idx + 1),
+      description: row['TransactionText'] as string | undefined,
+      quantity: row['Quantity'] as number | undefined,
+      lineExtensionAmount: amount(rowAmount, currency),
+      accountNumber: row['AccountNumber'] != null ? String(row['AccountNumber']) : undefined,
+    };
+  });
 
   const legalMonetaryTotal: LegalMonetaryTotalDto = {
     lineExtensionAmount: amount(total, currency),
@@ -182,7 +188,7 @@ export function mapVismaToAccountingAccount(raw: Record<string, unknown>): Accou
     accountNumber: String(raw['Number'] ?? ''),
     name: (raw['Name'] as string) ?? '',
     type,
-    vatCode: raw['VatCodeId'] as string | undefined,
+    vatCode: raw['VatCodeId'] != null ? String(raw['VatCodeId']) : undefined,
     active: raw['IsActive'] !== false,
     _raw: raw,
   };

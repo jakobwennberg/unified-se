@@ -652,7 +652,7 @@ describe('mapFortnoxToJournal', () => {
   it('maps voucher header fields', () => {
     const result = mapFortnoxToJournal(voucherFixture);
 
-    expect(result.id).toBe('A145');
+    expect(result.id).toBe('A-145');
     expect(result.journalNumber).toBe('145');
     expect(result.description).toBe('Hyra kontor december 2024');
     expect(result.registrationDate).toBe('2024-12-01');

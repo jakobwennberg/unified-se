@@ -232,6 +232,7 @@ export class FortnoxProvider implements AccountingProviderV2 {
     }
     if (options?.fromDate) params.set('fromdate', options.fromDate);
     if (options?.toDate) params.set('todate', options.toDate);
+    if (options?.fiscalYear) params.set('financialyear', String(options.fiscalYear));
 
     const separator = config.listEndpoint.includes('?') ? '&' : '?';
     const path = params.toString()
@@ -247,7 +248,34 @@ export class FortnoxProvider implements AccountingProviderV2 {
       | { '@TotalResources': number; '@TotalPages': number; '@CurrentPage': number }
       | undefined;
 
-    const items = (response[config.listKey] as Record<string, unknown>[]) ?? [];
+    let items = (response[config.listKey] as Record<string, unknown>[]) ?? [];
+
+    // Hydrate entries by fetching detail for each voucher when requested
+    if (options?.includeEntries && config.supportsEntryHydration) {
+      items = await Promise.all(
+        items.map(async (item) => {
+          try {
+            const series = String(item['VoucherSeries'] ?? '');
+            const number = String(item['VoucherNumber'] ?? '');
+            const year = String(item['Year'] ?? options?.fiscalYear ?? '');
+            const fyParam = year ? `?financialyear=${year}` : '';
+            const detailPath = `/vouchers/${series}/${number}${fyParam}`;
+            const detailResponse = await this.client.get<Record<string, unknown>>(
+              credentials.accessToken,
+              detailPath,
+            );
+            const detail = detailResponse[config.detailKey] as Record<string, unknown> | undefined;
+            if (detail?.['VoucherRows']) {
+              return { ...item, VoucherRows: detail['VoucherRows'] };
+            }
+          } catch {
+            // Graceful degradation: return item without entries on failure
+          }
+          return item;
+        }),
+      );
+    }
+
     const mapped = items.map((item) => config.mapper(item) as T);
 
     return {
@@ -263,6 +291,7 @@ export class FortnoxProvider implements AccountingProviderV2 {
     credentials: ProviderCredentials,
     resourceType: ResourceType,
     resourceId: string,
+    options?: ResourceQueryOptions,
   ): Promise<T | null> {
     const config = FORTNOX_RESOURCE_CONFIGS[resourceType];
     if (!config) {
@@ -270,7 +299,13 @@ export class FortnoxProvider implements AccountingProviderV2 {
     }
 
     try {
-      const path = config.detailEndpoint.replace('{id}', resourceId);
+      const queryParams: Record<string, string> = {};
+      if (options?.fiscalYear) queryParams['financialyear'] = String(options.fiscalYear);
+
+      const path = config.resolveDetailPath
+        ? config.resolveDetailPath(resourceId, queryParams)
+        : config.detailEndpoint.replace('{id}', resourceId);
+
       const response = await this.client.get<Record<string, unknown>>(
         credentials.accessToken,
         path,

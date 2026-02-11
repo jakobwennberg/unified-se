@@ -26,6 +26,10 @@ export interface FortnoxResourceConfig {
   supportsLastModified: boolean;
   /** Whether this resource is a single resource (not a list) */
   singleton?: boolean;
+  /** Build the detail path from a composite resourceId (e.g. voucher series+number) */
+  resolveDetailPath?: (resourceId: string, query?: Record<string, string>) => string;
+  /** Whether this resource supports entry hydration via detail fetches */
+  supportsEntryHydration?: boolean;
 }
 
 export const FORTNOX_RESOURCE_CONFIGS: Partial<Record<ResourceType, FortnoxResourceConfig>> = {
@@ -73,6 +77,15 @@ export const FORTNOX_RESOURCE_CONFIGS: Partial<Record<ResourceType, FortnoxResou
     idField: 'VoucherNumber',
     mapper: mapFortnoxToJournal,
     supportsLastModified: false,
+    supportsEntryHydration: true,
+    resolveDetailPath: (resourceId, query) => {
+      const dashIdx = resourceId.indexOf('-');
+      const series = dashIdx >= 0 ? resourceId.slice(0, dashIdx) : resourceId;
+      const number = dashIdx >= 0 ? resourceId.slice(dashIdx + 1) : resourceId;
+      const fy = query?.['financialyear'] ?? '';
+      const params = fy ? `?financialyear=${fy}` : '';
+      return `/vouchers/${series}/${number}${params}`;
+    },
   },
   [ResourceType.AccountingAccounts]: {
     listEndpoint: '/accounts',

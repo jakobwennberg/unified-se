@@ -192,10 +192,19 @@ app.get('/:consentId/:resourceType', async (c) => {
 
     const page = c.req.query('page') ? Number(c.req.query('page')) : 1;
     const pageSize = c.req.query('pageSize') ? Number(c.req.query('pageSize')) : 100;
+    const includeEntries = c.req.query('includeEntries') === 'true';
+    const financialyear = c.req.query('financialyear');
+
+    // Forward financialyear to Fortnox list endpoint for journals
+    let listEndpoint = config.listEndpoint;
+    if (financialyear) {
+      const sep = listEndpoint.includes('?') ? '&' : '?';
+      listEndpoint = `${listEndpoint}${sep}financialyear=${financialyear}`;
+    }
 
     const result = await fortnoxClient.getPage<Record<string, unknown>>(
       accessToken,
-      config.listEndpoint,
+      listEndpoint,
       config.listKey,
       {
         page,
@@ -203,6 +212,38 @@ app.get('/:consentId/:resourceType', async (c) => {
         lastModified: c.req.query('lastModified'),
       },
     );
+
+    // Hydrate entries by fetching detail for each voucher when requested
+    if (includeEntries && config.supportsEntryHydration) {
+      const hydrated = await Promise.all(
+        result.items.map(async (item) => {
+          try {
+            const series = String(item['VoucherSeries'] ?? '');
+            const number = String(item['VoucherNumber'] ?? '');
+            const year = String(item['Year'] ?? financialyear ?? '');
+            const fyParam = year ? `?financialyear=${year}` : '';
+            const detailPath = `/vouchers/${series}/${number}${fyParam}`;
+            const detailResponse = await fortnoxClient.get<Record<string, unknown>>(accessToken, detailPath);
+            const detail = detailResponse[config.detailKey] as Record<string, unknown> | undefined;
+            if (detail?.['VoucherRows']) {
+              return { ...item, VoucherRows: detail['VoucherRows'] };
+            }
+          } catch {
+            // Graceful degradation: return item without entries on failure
+          }
+          return item;
+        }),
+      );
+      const mapped = hydrated.map(config.mapper).map(stripRaw);
+      return c.json({
+        data: mapped,
+        page: result.page,
+        pageSize,
+        totalCount: result.totalCount,
+        totalPages: result.totalPages,
+        hasMore: result.page < result.totalPages,
+      });
+    }
 
     const mapped = result.items.map(config.mapper).map(stripRaw);
     return c.json({
@@ -451,7 +492,14 @@ app.get('/:consentId/:resourceType/:resourceId', async (c) => {
       return c.json({ error: `Resource ${resourceType} not supported for fortnox` }, 400);
     }
 
-    const detailPath = config.detailEndpoint.replace('{id}', resourceId);
+    const queryParams: Record<string, string> = {};
+    const financialyear = c.req.query('financialyear');
+    if (financialyear) queryParams['financialyear'] = financialyear;
+
+    const detailPath = config.resolveDetailPath
+      ? config.resolveDetailPath(resourceId, queryParams)
+      : config.detailEndpoint.replace('{id}', resourceId);
+
     const response = await fortnoxClient.get<Record<string, unknown>>(accessToken, detailPath);
     const data = response[config.detailKey];
     if (!data) {

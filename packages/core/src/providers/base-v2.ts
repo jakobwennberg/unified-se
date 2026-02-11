@@ -11,6 +11,8 @@ export interface ResourceQueryOptions {
   lastModified?: string;
   fiscalYear?: number;
   filter?: Record<string, string>;
+  /** When true, hydrate journal entries by fetching each voucher's detail (Fortnox-specific) */
+  includeEntries?: boolean;
 }
 
 export interface ResourceCapabilities {

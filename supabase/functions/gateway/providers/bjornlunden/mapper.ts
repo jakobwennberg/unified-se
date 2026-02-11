@@ -206,17 +206,21 @@ export function mapBLToSupplier(raw: Record<string, unknown>): SupplierDto {
  * Map BL Journal/Ledger Entry to JournalDto.
  *
  * BL fields: entityId, journalId, journalEntryId, journalEntryDate,
- * journalEntryText, financialYearId, ledgerEntries[{ accountId, debit, credit, text }],
- * totalCreditSum
+ * journalEntryText, financialYearId, ledgerEntries[{ accountId, amount, text }],
+ * totalCreditSum, totalDebitSum
  */
 export function mapBLToJournal(raw: Record<string, unknown>): JournalDto {
   const rawEntries = (raw['ledgerEntries'] as Record<string, unknown>[] | undefined) ?? [];
-  const entries: AccountingEntryDto[] = rawEntries.map((entry) => ({
-    accountNumber: String(entry['accountId'] ?? ''),
-    debit: (entry['debit'] as number) ?? 0,
-    credit: (entry['credit'] as number) ?? 0,
-    description: entry['text'] as string | undefined,
-  }));
+  const entries: AccountingEntryDto[] = rawEntries.map((entry) => {
+    // BL LedgerEntry has a single `amount` field: positive = debit, negative = credit
+    const amt = (entry['amount'] as number) ?? 0;
+    return {
+      accountNumber: String(entry['accountId'] ?? ''),
+      debit: amt > 0 ? amt : 0,
+      credit: amt < 0 ? Math.abs(amt) : 0,
+      description: entry['text'] as string | undefined,
+    };
+  });
 
   const totalCredit = (raw['totalCreditSum'] as number) ?? 0;
   const totalDebit = (raw['totalDebitSum'] as number) ?? entries.reduce((sum, e) => sum + e.debit, 0);

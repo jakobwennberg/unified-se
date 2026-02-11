@@ -32,6 +32,10 @@ export interface FortnoxResourceConfig extends ResourceConfig {
   listKey: string;
   detailKey: string;
   supportsLastModified: boolean;
+  /** Build the detail path from a composite resourceId (e.g. voucher series+number) */
+  resolveDetailPath?: (resourceId: string, query?: Record<string, string>) => string;
+  /** Whether this resource supports entry hydration via detail fetches */
+  supportsEntryHydration?: boolean;
 }
 
 export interface VismaResourceConfig extends ResourceConfig {
