@@ -51,8 +51,8 @@ app.post('/', async (c) => {
     return c.json({ error: 'name and provider are required' }, 400);
   }
 
-  if (!['fortnox', 'visma', 'briox'].includes(provider)) {
-    return c.json({ error: 'provider must be fortnox, visma, or briox' }, 400);
+  if (!['fortnox', 'visma', 'briox', 'bokio', 'bjornlunden'].includes(provider)) {
+    return c.json({ error: 'provider must be fortnox, visma, briox, bokio, or bjornlunden' }, 400);
   }
 
   const id = crypto.randomUUID();

@@ -146,6 +146,8 @@ export default function ConsentsPage() {
                 <option value="fortnox">Fortnox</option>
                 <option value="visma">Visma eEkonomi</option>
                 <option value="briox">Briox</option>
+                <option value="bokio">Bokio</option>
+                <option value="bjornlunden">Bjorn Lunden</option>
               </Select>
             </div>
             <div className="space-y-2">

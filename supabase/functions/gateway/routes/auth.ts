@@ -4,6 +4,8 @@ import type { OAuthConfig, TokenResponse } from '../providers/types.ts';
 import { buildFortnoxAuthUrl, exchangeFortnoxCode, refreshFortnoxToken, revokeFortnoxToken } from '../providers/fortnox/oauth.ts';
 import { buildVismaAuthUrl, exchangeVismaCode, refreshVismaToken, revokeVismaToken } from '../providers/visma/oauth.ts';
 import { exchangeBrioxCode, refreshBrioxToken } from '../providers/briox/oauth.ts';
+import { storeBokioToken } from '../providers/bokio/oauth.ts';
+import { storeBjornLundenToken, refreshBjornLundenToken } from '../providers/bjornlunden/oauth.ts';
 
 const app = new Hono();
 
@@ -29,11 +31,25 @@ function getOAuthConfig(provider: string): OAuthConfig {
       redirectUri: '',
     };
   }
+  if (provider === 'bokio') {
+    return {
+      clientId: '',
+      clientSecret: '',
+      redirectUri: '',
+    };
+  }
+  if (provider === 'bjornlunden') {
+    return {
+      clientId: Deno.env.get('BJORN_LUNDEN_CLIENT_ID') ?? '',
+      clientSecret: Deno.env.get('BJORN_LUNDEN_CLIENT_SECRET') ?? '',
+      redirectUri: '',
+    };
+  }
   throw new Error(`Unknown provider: ${provider}`);
 }
 
 function validateProvider(provider: string): boolean {
-  return provider === 'fortnox' || provider === 'visma' || provider === 'briox';
+  return provider === 'fortnox' || provider === 'visma' || provider === 'briox' || provider === 'bokio' || provider === 'bjornlunden';
 }
 
 // GET /api/v1/auth/:provider/url — get OAuth authorization URL
@@ -45,6 +61,14 @@ app.get('/:provider/url', async (c) => {
 
   if (provider === 'briox') {
     return c.json({ error: 'Briox uses application tokens, not OAuth. Use the callback endpoint with an application token.' }, 400);
+  }
+
+  if (provider === 'bokio') {
+    return c.json({ error: 'Bokio uses private API tokens, not OAuth. Use the callback endpoint with an API token and company ID.' }, 400);
+  }
+
+  if (provider === 'bjornlunden') {
+    return c.json({ error: 'Björn Lunden uses client credentials. Use the callback endpoint with a company key.' }, 400);
   }
 
   const config = getOAuthConfig(provider);
@@ -76,6 +100,14 @@ app.post('/:provider/exchange', async (c) => {
 
   const config = getOAuthConfig(provider);
   let tokens: TokenResponse;
+
+  if (provider === 'bokio') {
+    return c.json({ error: 'Bokio uses private API tokens. Use the callback endpoint instead.' }, 400);
+  }
+
+  if (provider === 'bjornlunden') {
+    return c.json({ error: 'Björn Lunden uses client credentials. Use the callback endpoint instead.' }, 400);
+  }
 
   if (provider === 'fortnox') {
     tokens = await exchangeFortnoxCode(config, code);
@@ -125,30 +157,71 @@ app.post('/:provider/callback', async (c) => {
     return c.json({ error: `Consent provider mismatch: expected ${consent.provider}, got ${provider}` }, 400);
   }
 
-  // Exchange code for tokens
-  const config = getOAuthConfig(provider);
+  // Exchange code for tokens (or store directly for bokio)
   let tokens: TokenResponse;
 
-  if (provider === 'fortnox') {
-    tokens = await exchangeFortnoxCode(config, code);
-  } else if (provider === 'briox') {
-    tokens = await exchangeBrioxCode(config.clientId, code);
+  if (provider === 'bokio') {
+    // Bokio: no token exchange — store the API token directly
+    const { companyId } = body;
+    if (!companyId) {
+      return c.json({ error: 'companyId is required for Bokio' }, 400);
+    }
+
+    tokens = storeBokioToken(code);
+
+    // Store tokens with provider_company_id
+    await sql`
+      INSERT INTO consent_tokens (consent_id, provider, access_token, refresh_token, token_expires_at, provider_company_id)
+      VALUES (${consentId}, ${provider}, ${tokens.access_token}, ${''}, ${null}, ${companyId})
+      ON CONFLICT (consent_id) DO UPDATE SET
+        access_token = ${tokens.access_token},
+        refresh_token = ${''},
+        token_expires_at = ${null},
+        provider_company_id = ${companyId}
+    `;
+  } else if (provider === 'bjornlunden') {
+    // Björn Lunden: client credentials grant — acquire token server-side, store company GUID
+    const { companyId } = body;
+    if (!companyId) {
+      return c.json({ error: 'companyId is required for Björn Lunden' }, 400);
+    }
+
+    tokens = await storeBjornLundenToken();
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+    await sql`
+      INSERT INTO consent_tokens (consent_id, provider, access_token, refresh_token, token_expires_at, provider_company_id)
+      VALUES (${consentId}, ${provider}, ${tokens.access_token}, ${''}, ${expiresAt}, ${companyId})
+      ON CONFLICT (consent_id) DO UPDATE SET
+        access_token = ${tokens.access_token},
+        refresh_token = ${''},
+        token_expires_at = ${expiresAt},
+        provider_company_id = ${companyId}
+    `;
   } else {
-    tokens = await exchangeVismaCode(config, code);
+    const config = getOAuthConfig(provider);
+
+    if (provider === 'fortnox') {
+      tokens = await exchangeFortnoxCode(config, code);
+    } else if (provider === 'briox') {
+      tokens = await exchangeBrioxCode(config.clientId, code);
+    } else {
+      tokens = await exchangeVismaCode(config, code);
+    }
+
+    // Calculate token expiry
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+    // Store tokens in consent_tokens (upsert)
+    await sql`
+      INSERT INTO consent_tokens (consent_id, provider, access_token, refresh_token, token_expires_at)
+      VALUES (${consentId}, ${provider}, ${tokens.access_token}, ${tokens.refresh_token}, ${expiresAt})
+      ON CONFLICT (consent_id) DO UPDATE SET
+        access_token = ${tokens.access_token},
+        refresh_token = ${tokens.refresh_token},
+        token_expires_at = ${expiresAt}
+    `;
   }
-
-  // Calculate token expiry
-  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-
-  // Store tokens in consent_tokens (upsert)
-  await sql`
-    INSERT INTO consent_tokens (consent_id, provider, access_token, refresh_token, token_expires_at)
-    VALUES (${consentId}, ${provider}, ${tokens.access_token}, ${tokens.refresh_token}, ${expiresAt})
-    ON CONFLICT (consent_id) DO UPDATE SET
-      access_token = ${tokens.access_token},
-      refresh_token = ${tokens.refresh_token},
-      token_expires_at = ${expiresAt}
-  `;
 
   // Update consent status to Accepted (1)
   const now = new Date().toISOString();
@@ -183,6 +256,25 @@ app.post('/:provider/refresh', async (c) => {
   `;
   if (consentRows.length === 0) {
     return c.json({ error: 'Consent not found' }, 404);
+  }
+
+  if (provider === 'bokio') {
+    return c.json({ error: 'Bokio uses private API tokens that do not expire. No refresh needed.' }, 400);
+  }
+
+  if (provider === 'bjornlunden') {
+    // BL uses client credentials — no refresh_token, just get a new access token
+    const tokens = await refreshBjornLundenToken();
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+    await sql`
+      UPDATE consent_tokens SET
+        access_token = ${tokens.access_token},
+        token_expires_at = ${expiresAt}
+      WHERE consent_id = ${consentId}
+    `;
+
+    return c.json({ success: true, expires_in: tokens.expires_in });
   }
 
   // Get current tokens
@@ -253,7 +345,7 @@ app.post('/:provider/revoke', async (c) => {
     } else if (provider === 'visma') {
       await revokeVismaToken(config, tokenRows[0].refresh_token);
     }
-    // Briox: no revocation endpoint — just delete stored tokens
+    // Briox/Bokio: no revocation endpoint — just delete stored tokens
   }
 
   // Delete tokens

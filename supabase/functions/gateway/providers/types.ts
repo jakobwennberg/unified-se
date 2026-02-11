@@ -1,6 +1,6 @@
 import type { ResourceType } from '../types/dto.ts';
 
-export type ProviderName = 'fortnox' | 'visma' | 'briox';
+export type ProviderName = 'fortnox' | 'visma' | 'briox' | 'bokio' | 'bjornlunden';
 
 export interface RateLimitConfig {
   maxRequests: number;
@@ -45,4 +45,14 @@ export interface BrioxResourceConfig extends ResourceConfig {
   supportsModifiedFilter: boolean;
   /** Whether this endpoint is scoped by financial year (e.g. /journal/{year}) */
   yearScoped?: boolean;
+}
+
+export interface BokioResourceConfig extends ResourceConfig {
+  /** Whether this endpoint supports pagination (chart-of-accounts does not) */
+  paginated?: boolean;
+}
+
+export interface BjornLundenResourceConfig extends ResourceConfig {
+  /** Whether this endpoint supports pagination */
+  paginated?: boolean;
 }

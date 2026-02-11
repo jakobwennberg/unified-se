@@ -202,7 +202,7 @@ export function mapFortnoxToJournal(raw: Record<string, unknown>): JournalDto {
   }));
 
   return {
-    id: `${raw['VoucherSeries'] ?? ''}${raw['VoucherNumber'] ?? ''}`,
+    id: `${raw['VoucherSeries'] ?? ''}-${raw['VoucherNumber'] ?? ''}`,
     journalNumber: String(raw['VoucherNumber'] ?? ''),
     series: raw['VoucherSeries'] ? {
       id: String(raw['VoucherSeries']),

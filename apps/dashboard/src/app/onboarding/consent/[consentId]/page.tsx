@@ -32,6 +32,9 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [applicationToken, setApplicationToken] = useState('');
+  const [bokioApiToken, setBokioApiToken] = useState('');
+  const [bokioCompanyId, setBokioCompanyId] = useState('');
+  const [blCompanyKey, setBlCompanyKey] = useState('');
 
   const fetchConsent = useCallback(async () => {
     try {
@@ -92,6 +95,68 @@ export default function OnboardingPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to connect Briox');
+      }
+
+      setDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setAccepting(false);
+    }
+  };
+
+  const handleBjornLundenConnect = async () => {
+    if (!consent || !blCompanyKey.trim()) return;
+    setAccepting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/proxy/api/v1/auth/bjornlunden/callback`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: blCompanyKey.trim(),
+            consentId,
+            companyId: blCompanyKey.trim(),
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to connect Björn Lunden');
+      }
+
+      setDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setAccepting(false);
+    }
+  };
+
+  const handleBokioConnect = async () => {
+    if (!consent || !bokioApiToken.trim() || !bokioCompanyId.trim()) return;
+    setAccepting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/proxy/api/v1/auth/bokio/callback`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: bokioApiToken.trim(),
+            consentId,
+            companyId: bokioCompanyId.trim(),
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to connect Bokio');
       }
 
       setDone(true);
@@ -169,6 +234,71 @@ export default function OnboardingPage() {
                 <button
                   onClick={handleBrioxConnect}
                   disabled={accepting || !applicationToken.trim()}
+                  className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {accepting ? 'Connecting...' : 'Connect'}
+                </button>
+              </>
+            ) : consent.provider === 'bokio' ? (
+              <>
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    To connect Bokio, you need your Company ID and an API Token:
+                  </p>
+                  <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
+                    <li>Log into your Bokio account</li>
+                    <li>Find your <strong>Company ID</strong> in the Bokio URL &mdash; it&apos;s the ID after <code className="bg-muted px-1 rounded">app.bokio.se/</code></li>
+                    <li>Go to Settings &rarr; API Tokens &rarr; Create Private Integration</li>
+                    <li>Copy and paste the API Token below</li>
+                  </ol>
+                  <input
+                    type="text"
+                    placeholder="Company ID (e.g. 14ccad83-67f6-49bd-...)"
+                    value={bokioCompanyId}
+                    onChange={(e) => setBokioCompanyId(e.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Paste your API Token here"
+                    value={bokioApiToken}
+                    onChange={(e) => setBokioApiToken(e.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+
+                <button
+                  onClick={handleBokioConnect}
+                  disabled={accepting || !bokioApiToken.trim() || !bokioCompanyId.trim()}
+                  className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {accepting ? 'Connecting...' : 'Connect'}
+                </button>
+              </>
+            ) : consent.provider === 'bjornlunden' ? (
+              <>
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    To connect Bj&ouml;rn Lund&eacute;n, you need your Company Key:
+                  </p>
+                  <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
+                    <li>Log into your Bj&ouml;rn Lund&eacute;n account</li>
+                    <li>Go to Integration Settings</li>
+                    <li>Find the <strong>Company Key</strong> (GUID) for your company</li>
+                    <li>Copy and paste it below</li>
+                  </ol>
+                  <input
+                    type="text"
+                    placeholder="Company Key (e.g. a1b2c3d4-e5f6-...)"
+                    value={blCompanyKey}
+                    onChange={(e) => setBlCompanyKey(e.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+
+                <button
+                  onClick={handleBjornLundenConnect}
+                  disabled={accepting || !blCompanyKey.trim()}
                   className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
                   {accepting ? 'Connecting...' : 'Connect'}
