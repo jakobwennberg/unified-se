@@ -192,7 +192,7 @@ app.get('/:consentId/:resourceType', async (c) => {
 
     const page = c.req.query('page') ? Number(c.req.query('page')) : 1;
     const pageSize = c.req.query('pageSize') ? Number(c.req.query('pageSize')) : 100;
-    const includeEntries = c.req.query('includeEntries') === 'true';
+    const includeEntries = c.req.query('includeEntries') !== 'false';
     const financialyear = c.req.query('financialyear');
 
     // Forward financialyear to Fortnox list endpoint for journals
